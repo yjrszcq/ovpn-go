@@ -13,7 +13,7 @@ API 默认关闭，内部仅使用 HTTP，不管理 TLS 证书。远程访问时
 
 ## 启用 API
 
-在在线 `openvpn` 服务中设置非空监听地址：
+Docker 部署在在线 `openvpn` 服务中设置非空监听地址：
 
 ```yaml
 services:
@@ -22,6 +22,8 @@ services:
       OVPN_API_LISTEN: 127.0.0.1:11940
       OVPN_API_CORS_ORIGINS: vpn-admin.example.com
 ```
+
+裸机安装在服务环境或前台进程中设置相同变量，见[裸机 API 配置](native-linux.md#api-与离线维护)。修改服务环境后需重启裸机服务。
 
 `OVPN_API_LISTEN` 使用 `地址:端口` 格式，端口可以是宿主机上任意未占用的 `1-65535` 端口：
 
@@ -58,7 +60,7 @@ vpn-admin.example.com {
 
 ## API key
 
-API key 只能通过容器内本地 CLI 创建、列出和删除。从宿主机执行时，命令格式约定为 `docker exec openvpn ovpn <command>`；以下示例仅列出 `ovpn ...` 简写：
+API key 只能通过本地 CLI 创建、列出和删除。Docker 使用 `docker exec openvpn ovpn <command>`，裸机使用 `sudo /opt/ovpn/ovpn <command>`；下方使用 `ovpn ...` 简写。CLI 必须操作 API 进程对应的同一实例数据目录：
 
 ```bash
 ovpn api key create frontend-production
@@ -69,7 +71,7 @@ ovpn api key delete frontend-production --yes
 完整 key 只在创建时输出一次。为避免终端历史或输出采集，可直接写入新的 mode-`0600` 文件：
 
 ```bash
-ovpn api key create frontend-production --output /etc/openvpn/frontend.key
+ovpn api key create frontend-production --output /root/frontend.key
 ```
 
 key 格式为 `ovpn_v1.<uuid>.<secret>`。SQLite 只保存其 SHA-256 摘要。删除后下一次请求立即失效；历史审计只保留 key UUID，不保留认证材料。

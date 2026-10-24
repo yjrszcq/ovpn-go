@@ -1,10 +1,10 @@
-# OpenVPN CLI 命令参考
+# ovpn-go CLI 命令参考
 
 这是当前源码树中 CLI 的完整命令参考。
 
 ## 范围与约定
 
-在线命令通过服务容器执行：
+Docker 部署的在线命令通过服务容器执行：
 
 ```bash
 docker exec openvpn ovpn <command>
@@ -20,25 +20,29 @@ docker compose run --rm openvpn-maintenance <command>
 
 maintenance 服务的 entrypoint 已经是 `ovpn`，因此 `<command>` 直接从 `config`、`state`、`repair` 或 `migrate` 开始。
 
+裸机安装使用 `sudo /opt/ovpn/ovpn <command>`，按实际安装位置替换路径。离线操作前先停止 `ovpn` 服务或前台进程；需要 maintenance 授权的命令使用 `sudo env OVPN_MAINTENANCE=true /opt/ovpn/ovpn` 前缀。服务控制和备份方法见[裸机指南](native-linux.md)。请勿与托管服务同时启动前台服务进程。
+
 - 已有客户端可使用位置名称、`--name/-n` 或 `--id/-i` 选择；未限定的位置选择器始终按名称处理。
 - validate 和 plan 命令只读。修改持久状态的命令按本文说明使用锁、事务和确认。
 - 持久配置来自声明式 YAML；bootstrap 环境变量只用于初始化。
 
-| 用途 | 默认路径 | 覆盖变量 |
-|---|---|---|
-| 期望 YAML | `/etc/ovpn-conf/config.yaml` | `OVPN_CONFIG_FILE` |
-| 持久化数据 | `/etc/openvpn` | `OVPN_DATA_DIR` |
-| 协调锁 | `/etc/openvpn` | `OVPN_DATA_DIR` |
-| runtime socket | `/run/openvpn-container` | `OVPN_RUNTIME_DIR` |
-| SQLite 权威库 | `/etc/openvpn/meta/state.db` | 由 data dir 派生 |
+默认路径如下，`<root>` 为裸机解压目录：
 
-`OVPN_MAINTENANCE=true` 授权离线迁移。批量地址编辑器依次取 `--editor/-e`、`OVPN_EDITOR`、`EDITOR`，最后使用 `nano`。镜像内置 `nano`、`vim` 和 `vi`；其他编辑器必须已经安装或挂载到容器内。外部二进制与模板覆盖变量只用于测试和开发，不属于常规部署配置。
+| 用途 | Docker 默认路径 | 裸机默认路径 | 覆盖变量 |
+|---|---|---|---|
+| 期望 YAML | `/etc/ovpn-conf/config.yaml` | `<root>/config/config.yaml` | `OVPN_CONFIG_FILE` |
+| 持久化数据 | `/etc/openvpn` | `<root>/data` | `OVPN_DATA_DIR` |
+| 协调锁 | `/etc/openvpn` | `<root>/data` | `OVPN_DATA_DIR` |
+| runtime socket | `/run/openvpn-container` | `<root>/run` | `OVPN_RUNTIME_DIR` |
+| SQLite 权威库 | `/etc/openvpn/meta/state.db` | `<root>/data/meta/state.db` | 由 data dir 派生 |
 
-`ovpn client`、`ovpn state`、`ovpn runtime` 是 `client list`、`state doctor`、`runtime status` 的安全快捷方式，并继承对应子命令的参数。例如 `ovpn client -d -j` 等同于 `ovpn client list -d -j`。顶层 `-v` 只输出项目版本，`-V` 与 `--version` 输出完整版本报告。裸执行 `ovpn` 会显示带说明和全部 leaf usage 的完整展开命令树；`ovpn -h` 仍显示详细根帮助。
+`OVPN_MAINTENANCE=true` 授权离线迁移。批量地址编辑器依次取 `--editor/-e`、`OVPN_EDITOR`、`EDITOR`，最后使用 `nano`。Docker 镜像内置 `nano`、`vim` 和 `vi`，裸机压缩包提供 `nano` 和 BusyBox `vi`；其他编辑器必须在相应部署环境中可用。外部二进制与模板覆盖变量只用于测试和开发，不属于常规部署配置。
+
+`ovpn client`、`ovpn state`、`ovpn runtime` 是 `client list`、`state doctor`、`runtime status` 的安全快捷方式，并继承对应子命令的参数。例如 `ovpn client -d -j` 等同于 `ovpn client list -d -j`。顶层 `-v` 只输出项目版本，`-V` 与 `--version` 输出完整版本报告。Docker 内执行无参数的 `docker exec openvpn ovpn` 会显示完整展开命令树；裸机 `ovpn` 启动器无参数执行会启动服务，并使用已有配置初始化空数据，缺少配置时拒绝启动。两种部署均可使用 `ovpn -h` 查看根帮助。
 
 ## 一次性环境变量初始化
 
-全新空实例可以根据 Compose 环境变量生成第一份 YAML。这只是初始化输入，不是第二套长期配置模式。设置 `OVPN_BOOTSTRAP_FROM_ENV=true`，并提供两个必填值：
+全新空 Docker 实例可以根据 Compose 环境变量生成第一份 YAML。裸机版无参数启动要求 YAML 已存在，应复制包内示例，不使用这里的 bootstrap 流程。这只是初始化输入，不是第二套长期配置模式。设置 `OVPN_BOOTSTRAP_FROM_ENV=true`，并提供两个必填值：
 
 | 环境变量 | YAML 字段 | 必填 |
 |---|---|---|
@@ -182,7 +186,7 @@ ovpn server init
 
 从有效 YAML 初始化空的 schema 4 数据目录。在 staging 中创建并验证 SQLite、PKI、服务端凭据、CRL、tls-crypt、配置和派生文件后统一安装。非空目录或不支持的旧格式会被拒绝。
 
-镜像 entrypoint 只在挂载数据目录为空时自动调用初始化；显式 `server run` 不会为缺失状态执行初始化。
+Docker entrypoint 和裸机版无参数启动只初始化空数据目录；裸机版还要求配置文件已存在。显式 `server run` 不会为缺失状态执行初始化。
 
 ### `ovpn server run`
 

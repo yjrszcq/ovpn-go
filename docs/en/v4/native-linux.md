@@ -77,6 +77,37 @@ sudo ovpn config apply --yes
 
 The CLI and optional REST API retain their existing interfaces and `OVPN_*` overrides. Overrides apply to each process; use the same settings for the service and CLI. For installer-managed updates, keep writable state under the installation's `config/`, `data/` and `run/` directories so it is included in recovery snapshots. Use `journalctl -u ovpn` for service startup diagnostics; OpenRC writes them under `run/service*.log`. The [REST API guide](rest-api.md) documents enabling and securing the API.
 
+## API and offline maintenance
+
+The API is disabled by default. For foreground use, first stop any managed instance, then start with an explicit loopback listener:
+
+```bash
+sudo env OVPN_API_LISTEN=127.0.0.1:11940 /opt/ovpn/ovpn
+```
+
+For a systemd service, use `sudo env SYSTEMD_EDITOR=/opt/ovpn/bin/nano systemctl edit ovpn` and add:
+
+```ini
+[Service]
+Environment="OVPN_API_LISTEN=127.0.0.1:11940"
+```
+
+Then run `sudo systemctl daemon-reload` and `sudo systemctl restart ovpn`. For OpenRC, place `export OVPN_API_LISTEN=127.0.0.1:11940` in `/etc/conf.d/ovpn` and restart with `sudo rc-service ovpn restart`. Set `OVPN_API_CORS_ORIGINS` in the same service environment when a browser frontend requires CORS. These settings belong to the process environment, not YAML. Use an HTTPS reverse proxy for remote access.
+
+Create an API key against this installation:
+
+```bash
+sudo /opt/ovpn/ovpn api key create frontend-production --output /root/frontend.key
+```
+
+For offline repair, configuration or migration operations, stop the service first. Commands requiring maintenance authorization use this form:
+
+```bash
+sudo env OVPN_MAINTENANCE=true /opt/ovpn/ovpn migrate plan
+```
+
+`migrate plan` is read-only; do not run `migrate apply` for a same-schema update. See the [command reference](commands.md) for supported migration sources and confirmation requirements.
+
 ## Update and recover
 
 ```bash
@@ -85,7 +116,39 @@ sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/ma
 
 The updater downloads and verifies first, then locks the installation. A running service is stopped, snapshotted, updated and restarted with a health check; a stopped service stays stopped. Your configuration, certificates, database, profiles, logs, permissions and service enablement are retained. A failed replacement or health check restores the previous program and snapshot. After an interrupted update, rerun the updater to recover the transaction. A retained `.update-backup/` means recovery needs attention; preserve it until the instance is healthy.
 
+For a custom installation, pass the same `OVPN_INSTALL_DIR` to the updater; set `OVPN_VERSION=vX.Y.Z` to select a published version.
+
 Updates require the same data schema and refuse downgrades. Repeating installation or updating to the installed version preserves state. Stop manually launched instances before updating; the updater refuses to terminate them. Keep independent backups as described in the [operations guide](operations.md).
+
+## Offline backup and restore
+
+Examples below use the default installation and systemd. For OpenRC, replace `systemctl stop/start ovpn` with `rc-service ovpn stop/start`. For foreground operation, stop the process and restart it manually after the operation. Stop all writers, including maintenance commands, before copying data.
+
+```bash
+sudo systemctl stop ovpn
+sudo /opt/ovpn/bin/tar -czf /root/ovpn-backup.tar.gz -C /opt/ovpn config data
+sudo chmod 600 /root/ovpn-backup.tar.gz
+sudo systemctl start ovpn
+```
+
+Store backups encrypted: they contain SQLite, CA/server/client private keys, certificates and profiles. A data directory and its configuration must be backed up and restored together.
+
+To restore, keep the service stopped, extract a trusted backup into a fresh directory and replace the complete data and configuration directories:
+
+```bash
+sudo systemctl stop ovpn
+sudo mkdir -m 700 /opt/ovpn/restore-work
+sudo /opt/ovpn/bin/tar -xzf /root/ovpn-backup.tar.gz -C /opt/ovpn/restore-work
+sudo mv /opt/ovpn/data /opt/ovpn/data-before-restore
+sudo mv /opt/ovpn/config /opt/ovpn/config-before-restore
+sudo mv /opt/ovpn/restore-work/data /opt/ovpn/data
+sudo mv /opt/ovpn/restore-work/config /opt/ovpn/config
+sudo /opt/ovpn/ovpn state doctor
+sudo systemctl start ovpn
+sudo /opt/ovpn/ovpn runtime health
+```
+
+Use an installation supporting the backup's schema. Do not restore only `state.db` or merge into existing data. Keep the previous directories until state and a real client connection are verified. If the extraction path differs from the backup's original installation, run `sudo /opt/ovpn/ovpn repair apply --yes` after restoring and before starting to rebuild derived absolute paths.
 
 ## Manual extraction and relocation
 
@@ -100,6 +163,6 @@ cp config/config.example.yaml config/config.yaml
 sudo ./ovpn
 ```
 
-No service manager is required for manual foreground operation. To use the CLI through PATH, add the extraction root, for example `export PATH="/opt/ovpn:$PATH"`; keep the whole directory together. Absolute paths, symlinks, different working directories and paths containing spaces are supported.
+No service manager is required for manual foreground operation. To use the CLI through PATH, add the extraction root, for example `export PATH="/opt/ovpn:$PATH"`; keep the whole directory together. Absolute paths, symlinks, different working directories and paths containing spaces are supported. `sudo` may reset PATH; use the absolute executable path or the installer-created `/usr/local/bin/ovpn` link in that case.
 
 Before initialization, move the directory freely. For an initialized instance, stop it, move the complete directory, then run `sudo /new/path/ovpn repair apply --yes` to regenerate derived absolute paths before restarting. Update any service definition and command symlink that still points to the old location. The installer-managed updater targets the directory and service originally registered; manual relocations require adjusting those paths first.

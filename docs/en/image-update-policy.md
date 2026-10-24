@@ -1,51 +1,50 @@
-# Image Update Policy
+# Deployment Update Policy
 
-This is the long-term policy for project code and runtime delivery.
+This policy covers ovpn-go Docker images and self-contained Linux archives. For native commands and service management, see the [native Linux guide](v4/native-linux.md).
 
 ## Version model
 
-The repository records separate release axes in `versions.env`:
+Project release, OpenVPN runtime and persistent data schema are separate version axes:
 
-- `IMAGE_VERSION`: project control-plane and container release.
-- `DATA_SCHEMA`: persistent structured-state format.
-- `OPENVPN_VERSION`: OpenVPN Community Edition runtime built into the image.
-- `GO_RUNTIME_VERSION`: version reported by the Go binaries; it is derived from `IMAGE_VERSION` in `versions.env`.
+- `IMAGE_VERSION` identifies the project release for both Docker and native distributions.
+- `DATA_SCHEMA` identifies the persistent structured-state format.
+- `OPENVPN_VERSION` identifies the bundled OpenVPN Community Edition runtime.
+- `GO_RUNTIME_VERSION` is the application version reported by the Go binaries, derived from `IMAGE_VERSION`; it is not the Go SDK version.
 
-Build inputs also pin the Go builder image and OpenVPN source checksum. `compatibility/contract.json` lists exact OpenVPN runtime versions and features verified for the image. `OPENVPN_CANDIDATE_RANGE` only constrains automation; it is not a compatibility claim.
+`ovpn version --json` reports the project version, schema, source information and Go SDK version. `ovpn runtime capabilities --json` reports the OpenVPN compatibility contract. A candidate-version range is an automation constraint, not a compatibility promise.
 
 ## Delivery boundary
 
-The image is the only project-code delivery unit. The CLI, hook, supervisor, broker, templates, migration code, and compatibility contract are built into the image. Runtime does not download code, query project releases, or select an online management bundle.
+Project programs, templates, migration support and compatibility contracts are shipped together in a Docker image or native archive. Native archives additionally include the private userspace runtime and dependencies. The running VPN service does not download or update its own code. The separately invoked native installer/updater downloads and verifies published Release assets.
 
-An image update may change project code, OpenVPN, the base system, or build dependencies. It must not silently apply YAML, rewrite credentials, migrate data, or modify structured state merely because a container started.
+Updates must not silently apply changed YAML, rewrite credentials or migrate schemas merely because a service starts. On an initialized instance, explicit `server run` uses the applied SQLite configuration; applying desired YAML remains an operator action.
 
-## Schema boundary
+## Choose a release
 
-Images sharing a data schema must interpret it identically. A same-schema update is performed by stopping the old service, selecting the new image, running read-only diagnosis, and starting the new service. Do not run migration for a same-schema update.
+- GHCR: `ghcr.io/yjrszcq/ovpn-go`; numeric tags `X.Y.Z`, `X.Y` and `X` track the project release. `latest` and verified `ovpn<version>` aliases are also published.
+- Docker Hub: `szcq/openvpn`; numeric tags track the embedded OpenVPN version, and `latest` follows the stable image.
+- Native archives: `openvpn-server-X.Y.Z-linux-amd64.tar.gz` and `openvpn-server-X.Y.Z-linux-arm64.tar.gz`, with `SHA256SUMS`. Choose the host architecture and verify the checksum.
 
-When the target requires a newer schema, normal runtime refuses old state. The operator must stop OpenVPN and run the target image's explicit maintenance migration according to the [data schema upgrade policy](data-schema-upgrade-policy.md).
+Pin a concrete version in production. After a repository rename, update GHCR references to the current repository namespace; Docker Hub names are unchanged. A native Release is ready for installation only when both architecture archives and `SHA256SUMS` are present.
 
-## Tag policy
+## Same-schema updates
 
-GHCR receives project image tags (`X.Y.Z`, `X.Y`, `X`, and `latest`) plus the verified OpenVPN tag. Docker Hub keeps the public OpenVPN-version tag used by existing deployments. Production users should always pin a concrete tag and verify `ovpn version --json` after update.
+Releases sharing a data schema interpret that schema identically. Back up data and configuration before updating. Do not run `migrate apply` for a same-schema change.
 
-Every candidate image is tested before publication. The candidate range may block stable promotion, but it does not suppress the tested candidate image. A prerelease `IMAGE_VERSION` is not eligible for stable promotion. OpenVPN cross-minor updates require the configured approval boundary.
+For Docker, stop the service, select the new image for both live and maintenance services, pull it, run read-only `state doctor`, and recreate the live service. Keep existing volumes and verify version, state and runtime health; see the [operations guide](v4/operations.md#image-update-without-a-schema-change).
 
-## Rollback boundary
+For installer-managed native deployments, use the [online updater](v4/native-linux.md#update-and-recover). It preserves the original running/stopped state and service enablement, snapshots state after stopping the service, and checks health after restarting. Failed replacement or health checks restore the previous program and snapshot. Rerun the updater to recover an interrupted transaction. Custom installations must pass the same `OVPN_INSTALL_DIR`; managed recovery snapshots cover the installation's `config/`, `data/` and `run/`. Stop manually launched instances before updating.
 
-A same-schema image can be rolled back by recreating the service with the prior image. After schema migration, image rollback alone is invalid: restore the matching complete pre-migration snapshot and use the image that supports that restored schema.
+The native updater accepts compatible schemas only and refuses downgrades. It is not a Docker-to-native conversion tool.
 
-## Release requirements
+## Schema changes and rollback
 
-Every stable release must pass:
+A newer schema requires an explicit supported migration with the service stopped; see the [data schema upgrade policy](data-schema-upgrade-policy.md). The native online updater does not perform cross-schema migration.
 
-- Go format, vet, unit, race, build, module, and dependency-license gates;
-- workflow/Shell/source-integrity checks;
-- strict YAML, SQLite, PKI, lifecycle, repair, recovery, and migration tests;
-- real schema handoff and rollback from the supported previous format;
-- real UDP and TCP client connections;
-- amd64 and arm64 image builds and dynamic dependency audits;
-- image-content checks proving the absence of legacy runtime Shell and Python;
-- complete English/Chinese command, operations, migration, backup, and rollback documentation.
+A same-schema Docker rollback can recreate the service with the prior image. A successful native update cannot be downgraded using the online updater; for deliberate rollback, stop the service and restore a matching prior program and complete backup. Automatic failure rollback is separate from an operator-requested downgrade.
 
-Image/schema version changes are made in the release-preparation phase. Update the project image version with `scripts/update-image-version.sh X.Y.Z`; it synchronizes the tracked version authority and Go fallback version, then validates release metadata. Documentation and tests remain version-independent. Ignored publishing drafts are intentionally outside its scope. A stable release is blocked while any required gate, review finding, or release metadata inconsistency remains unresolved.
+After schema migration, changing only the image or executable is insufficient: restore the complete pre-migration snapshot and use a program supporting that restored schema. Never restore only the SQLite file or merge a backup into live state.
+
+## Release validation
+
+Release validation covers initialization, PKI, client and address management, configuration, backup/recovery, migration compatibility and real VPN traffic. Native attachments are uploaded only after both native architecture build and acceptance jobs pass. Read each Release's compatibility and validation notes for the tested distributions and any hardware/emulation boundary.

@@ -1,8 +1,10 @@
-# OpenVPN 操作手册
+# ovpn-go 操作手册
 
-本文按运维工作流说明部署、日常客户端管理、配置、诊断、迁移和恢复。完整语法、参数与退出码见[命令参考](commands.md)。持久化兼容性遵循[数据升级政策](../data-schema-upgrade-policy.md)，镜像交付与回滚遵循[镜像更新政策](../image-update-policy.md)。
+本文按运维工作流说明部署、日常客户端管理、配置、诊断、迁移和恢复。完整语法、参数与退出码见[命令参考](commands.md)。持久化兼容性遵循[数据升级政策](../data-schema-upgrade-policy.md)，Docker 与裸机交付及回滚遵循[部署更新政策](../image-update-policy.md)。
 
 ## 运行环境约定
+
+下方 Compose 示例适用于 Docker。裸机安装使用 `sudo /opt/ovpn/ovpn <command>`，共享相同 CLI 和数据模型，并按实际安装位置替换路径。离线操作前停止服务，需要 maintenance 授权时使用 `sudo env OVPN_MAINTENANCE=true /opt/ovpn/ovpn <command>`。裸机初始化、服务控制、更新、API 配置及备份恢复见[Linux 裸机指南](native-linux.md)。
 
 - `openvpn`：在线服务，拥有 `/dev/net/tun`、`NET_ADMIN`、management broker、OpenVPN 和可选 REST API。
 - `openvpn-maintenance`：挂载相同数据与 YAML 的 one-shot CLI，不请求 TUN 或 `NET_ADMIN`，并设置 `OVPN_MAINTENANCE=true`。

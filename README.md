@@ -7,29 +7,65 @@ ovpn-go manages OpenVPN Community Edition servers with a Go control plane and SQ
 ## Features
 
 - Go binaries provide the CLI, entrypoint, OpenVPN hook, process supervisor, management broker, and optional authenticated REST API.
-- SQLite at `/etc/openvpn/meta/state.db` as the sole authority for structured configuration, client, address, artifact metadata, audit, and operation state.
+- SQLite at `meta/state.db` under the instance data directory as the sole authority for structured configuration, client, address, artifact metadata, audit, and operation state.
 - Easy-RSA remains the PKI authority. Certificates, private keys, CRL, tls-crypt material, profiles, CCD files, and logs remain files under the data directory.
 - Declarative YAML configuration with strict unknown-field, duplicate-field, type, null, and multi-document rejection.
 - IPv4 TUN addressing, static and dynamic allocation, NAT, route and DNS pushes, and client-to-client operation.
 - UDP or TCP transport over public IPv4 or IPv6. IPv6 tunnel addressing and a dual-stack VPN data plane are not implemented yet.
-- `linux/amd64` and `linux/arm64` images built from checksum-pinned OpenVPN source.
+- `linux/amd64` and `linux/arm64` Docker images and self-contained Linux archives built from checksum-pinned OpenVPN source.
 
 The project does not currently provide a web UI, TAP, LDAP/RADIUS/OIDC, Kubernetes integration, PostgreSQL/MySQL storage, or HA coordination.
 
 REST API v1 is disabled by default and intended for a separate frontend or automation client behind an HTTPS reverse proxy. See the [REST API guide](docs/en/v4/rest-api.md).
 
-For deployment without Docker, use the self-contained amd64/arm64 archives and online installer described in the [native Linux guide](docs/en/v4/native-linux.md).
+## Deployment options
+
+| Deployment | Distribution | Getting started |
+| --- | --- | --- |
+| Docker | `szcq/openvpn` or `ghcr.io/yjrszcq/ovpn-go` | Compose instructions below |
+| Native Linux | Self-contained amd64/arm64 archive | [Install, configure, run and update](docs/en/v4/native-linux.md) |
+
+GHCR numeric tags track the project version; Docker Hub numeric tags track the embedded OpenVPN version. Choose the correct version axis when pinning an image.
 
 ## Quick start
 
-### Requirements
+### Native Linux (online installer)
+
+Requires Linux TUN support, root/network administration privileges, Bash, curl, tar and SHA-256 verification tools. Wait until both architecture archives and `SHA256SUMS` are present on the Release page.
+
+```bash
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
+sudo cp /opt/ovpn/config/config.example.yaml /opt/ovpn/config/config.yaml
+sudo /opt/ovpn/bin/nano /opt/ovpn/config/config.yaml
+```
+
+The script selects the latest stable Release, installs to `/opt/ovpn` and registers a service without starting it. Set `server.endpoint` to your public hostname/IP and choose a non-overlapping `ipv4.network` before starting.
+
+For systemd:
+
+```bash
+sudo systemctl enable --now ovpn
+```
+
+For OpenRC:
+
+```bash
+sudo rc-update add ovpn default
+sudo rc-service ovpn start
+```
+
+Keep the VPN port accessible through host/cloud firewalls. For custom directories, version selection, online updates, API setup and backups, see the [native Linux guide](docs/en/v4/native-linux.md).
+
+### Docker
+
+#### Requirements
 
 - Docker Engine with the Docker Compose plugin.
 - A Linux host with `/dev/net/tun` and permission to grant `NET_ADMIN`.
 - A public hostname or IP reachable by clients, with the selected OpenVPN port allowed by host and cloud firewalls.
 - A private IPv4 CIDR that does not overlap the server or client networks.
 
-### Create the deployment
+#### Create the deployment
 
 Create the persistent and configuration directories:
 
@@ -75,7 +111,7 @@ $EDITOR config/config.yaml
 
 Then remove the entire `environment:` block from the `openvpn` service in the Compose example. The mounted file becomes the desired configuration; only `version`, `server.endpoint`, and `ipv4.network` are required, and the example file documents the remaining defaults.
 
-### Initialize and start
+#### Initialize and start
 
 ```bash
 docker compose up -d
@@ -89,7 +125,7 @@ The entrypoint initializes only an empty data directory and requires either a va
 
 YAML is the desired configuration; SQLite stores the last operator-confirmed applied revision. If YAML later becomes missing or differs from that revision, `server run` warns and continues with the applied SQLite snapshot. It never applies configuration implicitly.
 
-### Create and export a client
+#### Create and export a client
 
 ```bash
 # Lowest available static IPv4 address, with the profile returned directly
@@ -113,6 +149,8 @@ Persistent server settings belong in declarative YAML. Environment variables con
 
 ### Deployment and operation
 
+Paths and editor defaults below describe Docker. Native defaults are relative to the extracted directory: `config/config.yaml`, `data/`, and `run/`; see the [native guide](docs/en/v4/native-linux.md).
+
 | Variable | Runtime default / Compose fallback | `.env.example` value | Purpose |
 |---|---|---|---|
 | `OVPN_IMAGE` | `szcq/openvpn:latest` | `szcq/openvpn:latest` | Image used by Compose. Pin a released version tag in production. |
@@ -126,6 +164,8 @@ Persistent server settings belong in declarative YAML. Environment variables con
 | `EDITOR` | `nano` | unset | Standard fallback editor executable when both `--editor/-e` and `OVPN_EDITOR` are unset. |
 
 ### One-time environment bootstrap
+
+This workflow is for Docker. The native no-argument launcher requires an existing configuration file; copy and edit its bundled example before starting.
 
 These variables are read only while initializing an empty instance with `OVPN_BOOTSTRAP_FROM_ENV=true`. They produce the first canonical YAML file. After initialization they are ignored with a warning and never overwrite YAML or SQLite; set the switch to `false` after the first successful start.
 
@@ -226,11 +266,12 @@ Restore into empty target directories while the service is stopped, preserve own
 
 ## Documentation
 
+- [native Linux installation and operation](docs/en/v4/native-linux.md)
 - [command reference](docs/en/v4/commands.md)
 - [operations guide](docs/en/v4/operations.md)
 - [REST API guide](docs/en/v4/rest-api.md)
 - [data upgrade and migration policy](docs/en/data-schema-upgrade-policy.md)
-- [image update policy](docs/en/image-update-policy.md)
+- [deployment update policy](docs/en/image-update-policy.md)
 - Historical references: [v1](docs/en/v1/commands.md), [v2](docs/en/v2/commands.md), and [v3](docs/en/v3/commands.md)
 
 ## License

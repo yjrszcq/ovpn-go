@@ -1,10 +1,12 @@
-# OpenVPN Operations Guide
+# ovpn-go Operations Guide
 
 This workflow-oriented guide covers deployment, routine client administration, configuration, diagnosis, migration, and recovery. See the [command reference](commands.md) for complete syntax, options, and exit codes.
 
-Persistent compatibility follows the [data schema upgrade policy](../data-schema-upgrade-policy.md). Image delivery and rollback follow the [image update policy](../image-update-policy.md).
+Persistent compatibility follows the [data schema upgrade policy](../data-schema-upgrade-policy.md). Docker and native delivery and rollback follow the [deployment update policy](../image-update-policy.md).
 
 ## Runtime conventions
+
+The Compose examples below describe Docker. Native installations use `sudo /opt/ovpn/ovpn <command>` against the same CLI and data model; replace the installation path if needed. Stop the service before offline operations and use `sudo env OVPN_MAINTENANCE=true /opt/ovpn/ovpn <command>` when maintenance authorization is required. Native initialization, service control, updates, API setup and backup/restore are covered in the [native Linux guide](native-linux.md).
 
 - `openvpn`: live service with `/dev/net/tun`, `NET_ADMIN`, the management broker, OpenVPN, and the optional REST API.
 - `openvpn-maintenance`: one-shot CLI container mounting the same data and YAML without TUN or `NET_ADMIN`. It sets `OVPN_MAINTENANCE=true`.

@@ -1,51 +1,50 @@
-# 镜像更新政策
+# 部署更新政策
 
-本文是项目代码和 runtime 交付的长期政策。
+本文适用于 ovpn-go Docker 镜像和自包含 Linux 压缩包。裸机命令及服务管理方法见 [Linux 裸机指南](v4/native-linux.md)。
 
 ## 版本模型
 
-`versions.env` 记录独立的发布轴：
+项目版本、OpenVPN runtime 和持久化数据 schema 是独立版本轴：
 
-- `IMAGE_VERSION`：项目控制面和容器版本。
+- `IMAGE_VERSION`：Docker 与裸机共用的项目发布版本。
 - `DATA_SCHEMA`：持久化结构化状态格式。
-- `OPENVPN_VERSION`：镜像内构建的 OpenVPN Community Edition 版本。
-- `GO_RUNTIME_VERSION`：Go 二进制报告的版本；在 `versions.env` 中由 `IMAGE_VERSION` 派生。
+- `OPENVPN_VERSION`：内置 OpenVPN Community Edition 版本。
+- `GO_RUNTIME_VERSION`：Go 二进制报告的应用版本，由 `IMAGE_VERSION` 派生，不是 Go SDK 版本。
 
-构建输入还固定 Go builder 镜像和 OpenVPN 源码 SHA-256。`compatibility/contract.json` 列出该镜像实际验证过的 OpenVPN 精确版本与 feature；`OPENVPN_CANDIDATE_RANGE` 只限制自动化，不代表兼容性承诺。
+`ovpn version --json` 报告项目版本、schema、构建来源及 Go SDK 版本；`ovpn runtime capabilities --json` 报告 OpenVPN 兼容性契约。候选版本范围只限制自动化，不是兼容性承诺。
 
 ## 交付边界
 
-镜像是唯一项目代码交付单元。CLI、hook、supervisor、broker、template、migration code 和 compatibility contract 全部内置。runtime 不下载代码、不查询项目 Release，也不选择在线 management bundle。
+项目程序、模板、迁移支持和兼容性契约随 Docker 镜像或裸机压缩包一起交付，裸机压缩包还包含独立用户态运行时及依赖。运行中的 VPN 服务不会自行下载或更新代码；单独执行的裸机安装器和更新器会下载并验证已发布 Release 附件。
 
-镜像更新可以改变项目代码、OpenVPN、基础系统或构建依赖，但不能仅因容器启动就静默 apply YAML、重写凭据、迁移数据或修改结构化状态。
+更新不能仅因服务启动就静默应用已改动的 YAML、重写凭据或迁移 schema。已初始化实例的显式 `server run` 使用已应用的 SQLite 配置；应用期望 YAML 仍需由操作员明确执行。
 
-## Schema 边界
+## 选择发布版本
 
-共用 data schema 的镜像必须以相同方式解释数据。同 schema 更新应停止旧服务、选择新镜像、运行只读诊断并启动新服务，不执行 migration。
+- GHCR：`ghcr.io/yjrszcq/ovpn-go`；数字 tag `X.Y.Z`、`X.Y` 和 `X` 对应项目版本，也提供 `latest` 和已验证的 `ovpn<version>` 别名。
+- Docker Hub：`szcq/openvpn`；数字 tag 对应内置 OpenVPN 版本，`latest` 跟随稳定镜像。
+- 裸机压缩包：`openvpn-server-X.Y.Z-linux-amd64.tar.gz` 和 `openvpn-server-X.Y.Z-linux-arm64.tar.gz`，附带 `SHA256SUMS`；按宿主架构选择并验证校验和。
 
-目标需要更新 schema 时，普通 runtime 会拒绝旧状态。操作员必须停止 OpenVPN，并按 [数据 schema 升级政策](data-schema-upgrade-policy.md)通过目标镜像执行显式 maintenance 迁移。
+生产环境固定明确版本。仓库更名后，GHCR 引用应改为当前仓库命名空间，Docker Hub 名称不变。两个架构压缩包和 `SHA256SUMS` 齐全后，裸机 Release 才可用于安装。
 
-## Tag 政策
+## 同 schema 更新
 
-GHCR 接收项目镜像 tag（`X.Y.Z`、`X.Y`、`X`、`latest`）以及验证过的 OpenVPN tag。Docker Hub 继续提供现有部署使用的 OpenVPN 版本 tag。生产环境必须固定明确 tag，并在更新后检查 `ovpn version --json`。
+共用 data schema 的版本以相同方式解释数据。更新前备份数据和配置，同 schema 变更不要执行 `migrate apply`。
 
-每个候选镜像都必须先测试再发布。候选范围可以阻止 stable 提升，但不会阻止已测试的候选镜像发布。prerelease `IMAGE_VERSION` 不允许稳定提升；OpenVPN 跨 minor 更新需要经过配置的审批边界。
+Docker 部署先停止服务，为在线和 maintenance 服务选择相同新镜像并拉取，执行只读 `state doctor` 后重建在线服务。保留原有数据卷，检查版本、状态及运行健康，详见[操作手册](v4/operations.md#不变-schema-的镜像更新)。
 
-## 回滚边界
+安装器管理的裸机部署使用[在线更新器](v4/native-linux.md#更新与恢复)。更新器保留原先运行/停止状态和开机启动设置，停服后保存快照，重启后检查健康；替换或健康检查失败时恢复旧程序和快照。更新中断后再次执行更新器恢复事务。自定义目录需传入相同的 `OVPN_INSTALL_DIR`，托管恢复快照覆盖安装目录内的 `config/`、`data/` 和 `run/`。手工启动的实例需先自行停止。
 
-同 schema 镜像可通过旧镜像重建服务回滚。发生 schema 迁移后，只回滚镜像无效：必须恢复匹配的完整迁移前快照，并使用支持该恢复 schema 的镜像。
+裸机更新器只接受兼容 schema 并拒绝降级，不负责 Docker 到裸机的部署转换。
 
-## 发布要求
+## Schema 变化与回滚
 
-每个稳定版本必须通过：
+更新 schema 需要在停服后执行明确支持的迁移，见[数据 schema 升级政策](data-schema-upgrade-policy.md)；裸机在线更新器不执行跨 schema 迁移。
 
-- Go format、vet、unit、race、build、module 和依赖许可证；
-- workflow、Shell 和官方源码完整性检查；
-- 严格 YAML、SQLite、PKI、生命周期、repair、recovery 和 migration 测试；
-- 从支持的上一格式执行真实 schema handoff 和 rollback；
-- 真实 UDP/TCP 客户端连接；
-- amd64/arm64 镜像构建和动态依赖审计；
-- 证明镜像不含旧 runtime Shell/Python 的内容检查；
-- 完整中英文命令、操作、迁移、备份和回滚文档。
+同 schema 的 Docker 回滚可使用旧镜像重建服务。裸机更新成功后，在线更新器不能用于降级；主动回滚需要停服，恢复匹配的旧程序及完整备份。更新失败时自动回滚与操作员主动降级是不同流程。
 
-镜像/schema 版本在发布准备阶段修改。项目镜像版本应通过 `scripts/update-image-version.sh X.Y.Z` 更新；脚本会同步已跟踪的版本权威和 Go fallback 版本，并验证 release metadata。文档和测试保持与具体版本无关。被忽略的发布草稿有意不在脚本处理范围内。任何门禁、review finding 或 release metadata 不一致未解决时，都必须阻止稳定发布。
+schema 迁移后，只切换镜像或可执行文件并不足够，必须恢复完整迁移前快照，并使用支持该 schema 的程序。不要只恢复 SQLite 文件，也不要将备份合并到 live 状态中。
+
+## 发布验证
+
+发布验证覆盖初始化、PKI、客户端与地址管理、配置、备份恢复、迁移兼容性和真实 VPN 流量。裸机附件仅在两种原生架构的构建与验收作业通过后上传。实际验证的发行版和硬件/仿真边界以各 Release 的兼容性与验证说明为准。

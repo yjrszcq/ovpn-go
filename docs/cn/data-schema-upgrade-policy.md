@@ -1,16 +1,16 @@
 # 数据 Schema 升级政策
 
-本文定义独立于命令手册和镜像发布的持久化兼容规则。
+本文定义独立于命令手册和部署发布的持久化兼容规则。
 
 ## 独立版本轴
 
-项目镜像版本、OpenVPN runtime 版本和整数 data schema 相互独立。只有持久化解释发生不兼容变化时才递增 schema。多个项目/OpenVPN 版本可以共用同一 schema，并且必须以完全相同的方式解释该 schema。
+项目发布版本、OpenVPN runtime 版本和整数 data schema 相互独立。只有持久化解释发生不兼容变化时才递增 schema。多个项目/OpenVPN 版本可以共用同一 schema，并且必须以完全相同的方式解释该 schema。
 
 迁移调度只依据数据目录中的证据，不能按镜像 tag、源码 revision、发布日期或 OpenVPN 版本猜测格式。
 
 ## 当前 schema 4 权威边界
 
-schema 4 将全部结构化权威状态保存在 `/etc/openvpn/meta/state.db`。PKI、私钥、CRL、tls-crypt、profile、CCD、派生 server config 和日志仍为文件。数据库与这些文件必须作为同一个备份/恢复单元。
+schema 4 将全部结构化权威状态保存在数据目录内的 `meta/state.db`：Docker 默认为 `/etc/openvpn/meta/state.db`，裸机默认为 `<root>/data/meta/state.db`。PKI、私钥、CRL、tls-crypt、profile、CCD、派生 server config 和日志仍为文件。数据库与这些文件必须作为同一个备份/恢复单元。
 
 runtime 不得维持 CSV/SQLite 双权威。runtime lease 明确属于可丢失 cache；业务状态与 audit 必须在同一 SQLite transaction 中提交。
 
@@ -24,13 +24,13 @@ runtime 不得维持 CSV/SQLite 双权威。runtime lease 明确属于可丢失 
 
 ## 支持的迁移入口
 
-v4 镜像只直接支持 schema 3 → 4。schema 1/2 必须先使用稳定 `sh-ver` 镜像升级到 schema 3。这样可以限制 Go runtime 的历史解析面，把更旧的迁移逻辑留在创建这些格式的维护分支中。
+v4 runtime（Docker 或裸机压缩包）只直接支持 schema 3 → 4。schema 1/2 必须先使用稳定 `sh-ver` 镜像升级到 schema 3。这样可以限制 Go runtime 的历史解析面，把更旧的迁移逻辑留在创建这些格式的维护分支中。
 
 未来 schema 变化必须明确支持的入口政策。优先提供直接 `N` → `N+1`，但如果保留全部历史 parser 会扩大可信 runtime 或削弱验证，项目可以要求先经过中间稳定镜像。不支持的路径必须给出可执行提示，绝不能猜测。
 
 ## Maintenance 事务
 
-破坏性迁移要求 OpenVPN 已停止，并通过目标镜像的 `openvpn-maintenance` 服务执行。`migrate plan` 只读；`migrate apply` 要求显式确认、`OVPN_MAINTENANCE=true`、独占 runtime lock、持久化完整快照及 digest、staging、目标验证和原子安装。
+破坏性迁移要求 OpenVPN 已停止。Docker 通过目标镜像的 `openvpn-maintenance` 服务执行，裸机使用目标安装中的 CLI：`sudo env OVPN_MAINTENANCE=true /opt/ovpn/ovpn migrate ...`。裸机在线更新器不执行 schema 迁移，离线操作和备份方法见[裸机指南](v4/native-linux.md)。`migrate plan` 只读；`migrate apply` 要求显式确认、`OVPN_MAINTENANCE=true`、独占 runtime lock、持久化完整快照及 digest、staging、目标验证和原子安装。
 
 数据库 audit 与业务状态在同一 transaction 提交。跨文件与 SQLite 的变化使用 operation journal 和 staging，使中断可以确定完成或回滚。
 
@@ -42,13 +42,6 @@ v4 镜像只直接支持 schema 3 → 4。schema 1/2 必须先使用稳定 `sh-v
 
 普通 schema 4 备份必须停止全部 writer，并归档完整数据和配置目录。禁止只恢复 `state.db`，也禁止把备份合并到 live artifact 中。
 
-## 完成定义
+## 迁移前检查
 
-schema 变化至少必须包含：
-
-- schema 递增与权威模型定义；
-- 明确支持和拒绝的源 schema；
-- 健康、损坏、冲突、大量数据和中断 fixture；
-- staging、snapshot、digest、rollback 和 crash recovery 测试；
-- 目标 `state doctor` 与真实 runtime handoff 验证；
-- 更新命令、操作、备份、迁移和回滚文档。
+确认源 schema、支持的迁移路径、目标版本及可用磁盘空间，保留已验证的完整备份和与旧 schema 匹配的运行程序。先审阅迁移 plan，再确认 apply；完成后检查 `state doctor`、运行健康和真实客户端连接。确认不再需要恢复前，保留迁移前快照。

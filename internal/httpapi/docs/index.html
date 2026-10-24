@@ -50,7 +50,7 @@
             <thead><tr><th>Command</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><code>ovpn api key create frontend-production</code></td><td id="api-key-create-description">Creates a key and prints its complete secret once.</td></tr>
-              <tr><td><code>ovpn api key create frontend-production --output /etc/openvpn/frontend.key</code></td><td id="api-key-output-description">Creates a key and writes it to a new mode-0600 file inside the container.</td></tr>
+              <tr><td><code>ovpn api key create frontend-production --output /root/frontend.key</code></td><td id="api-key-output-description">Creates a key and writes it to a new mode-0600 local file.</td></tr>
               <tr><td><code>ovpn api key list</code></td><td id="api-key-list-description">Lists key metadata without revealing secrets.</td></tr>
               <tr><td><code>ovpn api key delete frontend-production --yes</code></td><td id="api-key-delete-description">Deletes the named key and invalidates it immediately.</td></tr>
             </tbody>

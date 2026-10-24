@@ -77,6 +77,37 @@ sudo ovpn config apply --yes
 
 CLI、可选 REST API 和已有 `OVPN_*` 覆盖继续有效。覆盖按进程生效，服务与 CLI 应使用相同设置。使用安装器管理更新时，请将可写状态保留在安装目录内的 `config/`、`data/` 和 `run/` 中，确保恢复快照包含这些状态。启动诊断可通过 `journalctl -u ovpn` 查看；OpenRC 将其写入 `run/service*.log`。API 的启用和保护方式见 [REST API 指南](rest-api.md)。
 
+## API 与离线维护
+
+API 默认关闭。前台使用时，先停止托管实例，再指定 loopback 监听地址启动：
+
+```bash
+sudo env OVPN_API_LISTEN=127.0.0.1:11940 /opt/ovpn/ovpn
+```
+
+systemd 服务执行 `sudo env SYSTEMD_EDITOR=/opt/ovpn/bin/nano systemctl edit ovpn` 并添加：
+
+```ini
+[Service]
+Environment="OVPN_API_LISTEN=127.0.0.1:11940"
+```
+
+然后执行 `sudo systemctl daemon-reload` 和 `sudo systemctl restart ovpn`。OpenRC 在 `/etc/conf.d/ovpn` 中设置 `export OVPN_API_LISTEN=127.0.0.1:11940`，再执行 `sudo rc-service ovpn restart`。浏览器前端需要 CORS 时，在同一服务环境中设置 `OVPN_API_CORS_ORIGINS`。这些设置属于进程环境，不写入 YAML；远程访问应使用 HTTPS 反向代理。
+
+针对该安装创建 API key：
+
+```bash
+sudo /opt/ovpn/ovpn api key create frontend-production --output /root/frontend.key
+```
+
+离线修复、配置或迁移操作前先停止服务。需要 maintenance 授权的命令采用以下形式：
+
+```bash
+sudo env OVPN_MAINTENANCE=true /opt/ovpn/ovpn migrate plan
+```
+
+`migrate plan` 只读；同 schema 更新不要执行 `migrate apply`。支持的迁移来源和确认要求见[命令参考](commands.md)。
+
 ## 更新与恢复
 
 ```bash
@@ -85,7 +116,39 @@ sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/ma
 
 更新器先下载验证，再锁定安装目录。服务原先运行时，会停止、保存快照、更新并重启检查健康；原先停止则继续停止。用户配置、证书、数据库、客户端配置、日志、权限和开机启动状态会保留。替换或健康检查失败时恢复旧程序和快照。更新中断后，再次执行更新器即可恢复事务；若 `.update-backup/` 仍保留，表示恢复需要处理，请在实例恢复健康前保留它。
 
+自定义安装目录需要向更新器传入相同的 `OVPN_INSTALL_DIR`；指定已发布版本时设置 `OVPN_VERSION=vX.Y.Z`。
+
 更新仅允许兼容的数据 schema，并拒绝降级。重复安装、同版本更新不会破坏状态。手工启动的实例需要先自行停止，更新器不会自动终止它们。独立备份方法见[操作手册](operations.md)。
+
+## 离线备份与恢复
+
+以下示例使用默认安装目录和 systemd。OpenRC 将 `systemctl stop/start ovpn` 换为 `rc-service ovpn stop/start`；前台运行则停止进程，操作后手工重启。复制数据前需停止全部 writer，包括维护命令。
+
+```bash
+sudo systemctl stop ovpn
+sudo /opt/ovpn/bin/tar -czf /root/ovpn-backup.tar.gz -C /opt/ovpn config data
+sudo chmod 600 /root/ovpn-backup.tar.gz
+sudo systemctl start ovpn
+```
+
+备份包含 SQLite、CA/服务端/客户端私钥、证书和 profile，应加密保存；数据目录和对应配置必须一起备份和恢复。
+
+恢复时保持服务停止，将可信备份解压到新目录，完整替换数据和配置目录：
+
+```bash
+sudo systemctl stop ovpn
+sudo mkdir -m 700 /opt/ovpn/restore-work
+sudo /opt/ovpn/bin/tar -xzf /root/ovpn-backup.tar.gz -C /opt/ovpn/restore-work
+sudo mv /opt/ovpn/data /opt/ovpn/data-before-restore
+sudo mv /opt/ovpn/config /opt/ovpn/config-before-restore
+sudo mv /opt/ovpn/restore-work/data /opt/ovpn/data
+sudo mv /opt/ovpn/restore-work/config /opt/ovpn/config
+sudo /opt/ovpn/ovpn state doctor
+sudo systemctl start ovpn
+sudo /opt/ovpn/ovpn runtime health
+```
+
+使用支持该备份 schema 的程序。不要只恢复 `state.db`，也不要合并到已有数据中；诊断和真实客户端连接验证完成前，保留原目录。如果恢复后的解压路径与备份原安装位置不同，在启动前执行 `sudo /opt/ovpn/ovpn repair apply --yes`，重建包含绝对路径的派生文件。
 
 ## 手工解压与移动目录
 
@@ -100,6 +163,6 @@ cp config/config.example.yaml config/config.yaml
 sudo ./ovpn
 ```
 
-手工前台运行不需要服务管理器。需要通过 PATH 使用 CLI 时，添加解压根目录，例如 `export PATH="/opt/ovpn:$PATH"`，并保持整个目录完整。支持绝对路径、符号链接、不同工作目录和含空格的路径。
+手工前台运行不需要服务管理器。需要通过 PATH 使用 CLI 时，添加解压根目录，例如 `export PATH="/opt/ovpn:$PATH"`，并保持整个目录完整。支持绝对路径、符号链接、不同工作目录和含空格的路径。`sudo` 可能重置 PATH，此时请使用程序绝对路径或安装器创建的 `/usr/local/bin/ovpn` 链接。
 
 初始化前可直接移动目录。已初始化的实例需要先停止，再移动完整目录，然后执行 `sudo /new/path/ovpn repair apply --yes`，重建含绝对路径的派生文件后再启动。仍指向旧位置的服务定义和命令链接也需要更新。安装器管理的更新器使用原先注册的目录和服务；手工移动后需要先同步调整这些路径。

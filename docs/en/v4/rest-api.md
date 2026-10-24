@@ -13,7 +13,7 @@ Documentation is public because it contains only the API contract. Actual `/api/
 
 ## Enable the API
 
-Set a non-empty listen address on the live `openvpn` service:
+For Docker, set a non-empty listen address on the live `openvpn` service:
 
 ```yaml
 services:
@@ -22,6 +22,8 @@ services:
       OVPN_API_LISTEN: 127.0.0.1:11940
       OVPN_API_CORS_ORIGINS: vpn-admin.example.com
 ```
+
+For native installations, configure the same variables in the service environment or pass them to the foreground process; see [native API setup](native-linux.md#api-and-offline-maintenance). Restart the native service after changing its environment.
 
 `OVPN_API_LISTEN` uses `address:port` format. The port may be any unused host port from `1` through `65535`:
 
@@ -58,7 +60,7 @@ The reverse proxy must provide HTTPS, preserve the `Authorization` header, and i
 
 ## API keys
 
-API keys can be created, listed, and deleted only through the local CLI inside the container. When running from the host, use `docker exec openvpn ovpn <command>`; the examples below use the shortened `ovpn ...` form:
+API keys can be created, listed and deleted only through the local CLI. Use `docker exec openvpn ovpn <command>` for Docker or `sudo /opt/ovpn/ovpn <command>` for native installations; the examples below use the shortened `ovpn ...` form. Run against the same instance data directory as the API process:
 
 ```bash
 ovpn api key create frontend-production
@@ -69,7 +71,7 @@ ovpn api key delete frontend-production --yes
 Create prints the complete key once. To avoid terminal history or captured output, write it directly to a new mode-`0600` file:
 
 ```bash
-ovpn api key create frontend-production --output /etc/openvpn/frontend.key
+ovpn api key create frontend-production --output /root/frontend.key
 ```
 
 The key format is `ovpn_v1.<uuid>.<secret>`. SQLite stores only its SHA-256 digest. Deleting a key invalidates the next request immediately; historical audit records retain the key UUID but no credential material.

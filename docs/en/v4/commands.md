@@ -1,10 +1,10 @@
-# OpenVPN CLI Reference
+# ovpn-go CLI Reference
 
 This is the complete command reference for the current CLI in this source tree.
 
 ## Scope and conventions
 
-Run live commands through the service container:
+For Docker deployments, run live commands through the service container:
 
 ```bash
 docker exec openvpn ovpn <command>
@@ -20,27 +20,29 @@ docker compose run --rm openvpn-maintenance <command>
 
 The maintenance service uses `ovpn` as its entrypoint, so `<command>` starts with `config`, `state`, `repair`, or `migrate`, not with another `ovpn`.
 
+For native installations, run `sudo /opt/ovpn/ovpn <command>` (replace the installation path as needed). For offline operations, stop the `ovpn` service or foreground process first and prefix commands requiring maintenance authorization with `sudo env OVPN_MAINTENANCE=true /opt/ovpn/ovpn`. See the [native guide](native-linux.md) for service control and backups. Do not run a foreground server alongside the managed service.
+
 - Existing clients can be selected by positional name, `--name/-n`, or `--id/-i`; an unqualified positional selector is always a name.
 - Validation and plan commands are read-only. Commands that change persistent state use locks, transactions, and confirmation where documented.
 - Persistent settings come from declarative YAML. Bootstrap environment variables are initialization inputs only.
 
-Default paths:
+Default paths (`<root>` is the native extraction directory):
 
-| Purpose | Path | Override |
-|---|---|---|
-| Desired YAML | `/etc/ovpn-conf/config.yaml` | `OVPN_CONFIG_FILE` |
-| Persistent data | `/etc/openvpn` | `OVPN_DATA_DIR` |
-| Coordination locks | `/etc/openvpn` | `OVPN_DATA_DIR` |
-| Runtime sockets | `/run/openvpn-container` | `OVPN_RUNTIME_DIR` |
-| SQLite authority | `/etc/openvpn/meta/state.db` | derived from data dir |
+| Purpose | Docker default | Native default | Override |
+|---|---|---|---|
+| Desired YAML | `/etc/ovpn-conf/config.yaml` | `<root>/config/config.yaml` | `OVPN_CONFIG_FILE` |
+| Persistent data | `/etc/openvpn` | `<root>/data` | `OVPN_DATA_DIR` |
+| Coordination locks | `/etc/openvpn` | `<root>/data` | `OVPN_DATA_DIR` |
+| Runtime sockets | `/run/openvpn-container` | `<root>/run` | `OVPN_RUNTIME_DIR` |
+| SQLite authority | `/etc/openvpn/meta/state.db` | `<root>/data/meta/state.db` | derived from data dir |
 
-`OVPN_MAINTENANCE=true` authorizes offline migration. The batch address editor is selected from `--editor/-e`, `OVPN_EDITOR`, `EDITOR`, then `nano`. The image includes `nano`, `vim`, and `vi`; any other editor must be installed or mounted inside the container. Binary/template overrides are test and development interfaces, not normal deployment configuration.
+`OVPN_MAINTENANCE=true` authorizes offline migration. The batch address editor is selected from `--editor/-e`, `OVPN_EDITOR`, `EDITOR`, then `nano`. The Docker image includes `nano`, `vim`, and `vi`; the native archive includes `nano` and BusyBox `vi`. Any additional editor must be available in the deployment environment. Binary/template overrides are test and development interfaces, not normal deployment configuration.
 
-`ovpn client`, `ovpn state`, and `ovpn runtime` are safe shortcuts for `client list`, `state doctor`, and `runtime status`, including their options. For example, `ovpn client -d -j` is equivalent to `ovpn client list -d -j`. At the top level, `-v` prints only the project version while `-V` and `--version` print the full version report. Running `ovpn` without arguments prints the fully expanded command tree with descriptions and every leaf usage; `ovpn -h` retains the detailed root help.
+`ovpn client`, `ovpn state`, and `ovpn runtime` are safe shortcuts for `client list`, `state doctor`, and `runtime status`, including their options. For example, `ovpn client -d -j` is equivalent to `ovpn client list -d -j`. At the top level, `-v` prints only the project version while `-V` and `--version` print the full version report. In Docker, running `docker exec openvpn ovpn` without arguments prints the fully expanded command tree. The native `ovpn` launcher without arguments starts the server and initializes empty data from an existing configuration; missing configuration is refused. Use `ovpn -h` for root help in either deployment.
 
 ## One-time environment bootstrap
 
-A new empty instance can generate its first YAML file from Compose environment variables. This is an initialization input, not a second configuration mode. Set `OVPN_BOOTSTRAP_FROM_ENV=true` and provide the two required values:
+A new empty Docker instance can generate its first YAML file from Compose environment variables. The native no-argument launcher requires an existing YAML file; use the bundled example instead of this bootstrap workflow. This is an initialization input, not a second configuration mode. Set `OVPN_BOOTSTRAP_FROM_ENV=true` and provide the two required values:
 
 | Environment variable | YAML field | Required |
 |---|---|---|
@@ -184,7 +186,7 @@ ovpn server init
 
 Initializes an empty schema 4 data directory from valid YAML. It stages and validates SQLite, PKI, server credentials, CRL, tls-crypt, configuration, and derived files before installation. A non-empty or unsupported legacy directory is refused.
 
-The image entrypoint calls initialization automatically only when the mounted data directory is empty. Explicit `server run` does not initialize missing state.
+The Docker entrypoint and native no-argument launcher initialize only empty data directories. The native launcher first requires a configuration file. Explicit `server run` does not initialize missing state.
 
 ### `ovpn server run`
 

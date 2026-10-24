@@ -7,29 +7,65 @@ ovpn-go 使用 Go 控制面和 SQLite 管理 OpenVPN Community Edition 服务端
 ## 主要能力
 
 - CLI、entrypoint、OpenVPN hook、进程监督器、management broker 和可选的认证 REST API 均由 Go 二进制提供。
-- `/etc/openvpn/meta/state.db` 是配置、客户端、地址、artifact 元数据、审计和 operation 状态的唯一结构化权威来源。
+- 数据目录内的 `meta/state.db` 是配置、客户端、地址、artifact 元数据、审计和 operation 状态的唯一结构化权威来源。
 - Easy-RSA 仍是 PKI 签发权威。证书、私钥、CRL、tls-crypt、profile、CCD 和日志仍作为数据目录中的文件保存。
 - 使用严格 YAML 声明期望配置，拒绝未知字段、重复字段、错误类型、null 和多文档。
 - 支持 IPv4 TUN、静态/动态地址、NAT、路由与 DNS 推送以及客户端互访。
 - 公网传输可使用 IPv4 或 IPv6 上的 UDP/TCP；IPv6 隧道地址和双栈 VPN 数据平面尚未实现。
-- 从校验和固定的 OpenVPN 源码构建 `linux/amd64` 和 `linux/arm64` 镜像。
+- 从校验和固定的 OpenVPN 源码构建 `linux/amd64` 和 `linux/arm64` Docker 镜像及自包含 Linux 压缩包。
 
 当前不提供 Web UI、TAP、LDAP/RADIUS/OIDC、Kubernetes、PostgreSQL/MySQL 或 HA。
 
 REST API v1 默认关闭，适合由独立前端或自动化客户端通过 HTTPS 反向代理访问。详见 [REST API 指南](docs/cn/v4/rest-api.md)。
 
-无需 Docker 的部署方式请使用自包含 amd64/arm64 压缩包及在线安装器，详见 [Linux 裸机安装指南](docs/cn/v4/native-linux.md)。
+## 部署方式
+
+| 部署方式 | 交付形式 | 入门文档 |
+| --- | --- | --- |
+| Docker | `szcq/openvpn` 或 `ghcr.io/yjrszcq/ovpn-go` | 下方 Compose 部署步骤 |
+| Linux 裸机 | 自包含 amd64/arm64 压缩包 | [安装、配置、运行和更新](docs/cn/v4/native-linux.md) |
+
+GHCR 数字 tag 对应项目版本，Docker Hub 数字 tag 对应内置 OpenVPN 版本；固定镜像版本时请区分这两个版本轴。
 
 ## 快速开始
 
-### 环境要求
+### Linux 裸机（在线脚本）
+
+需要 Linux TUN 支持、root/网络管理权限，以及 Bash、curl、tar 和 SHA-256 校验工具。请确认 Release 页面上的两个架构压缩包和 `SHA256SUMS` 均已齐全。
+
+```bash
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
+sudo cp /opt/ovpn/config/config.example.yaml /opt/ovpn/config/config.yaml
+sudo /opt/ovpn/bin/nano /opt/ovpn/config/config.yaml
+```
+
+脚本自动选择最新稳定 Release，安装到 `/opt/ovpn` 并注册服务，但不会自动启动。请先将 `server.endpoint` 改为公网域名或 IP，并选择不重叠的 `ipv4.network`。
+
+systemd：
+
+```bash
+sudo systemctl enable --now ovpn
+```
+
+OpenRC：
+
+```bash
+sudo rc-update add ovpn default
+sudo rc-service ovpn start
+```
+
+请在宿主及云防火墙放行 VPN 端口。指定目录、选择版本、在线更新、API 配置和备份方法见 [Linux 裸机指南](docs/cn/v4/native-linux.md)。
+
+### Docker
+
+#### 环境要求
 
 - Docker Engine 和 Docker Compose plugin。
 - Linux 主机提供 `/dev/net/tun`，并允许容器使用 `NET_ADMIN`。
 - 客户端可访问的公网域名或 IP，主机与云防火墙开放所选 OpenVPN 端口。
 - 一个不与服务器和客户端现有网络重叠的私有 IPv4 CIDR。
 
-### 创建部署
+#### 创建部署
 
 ```bash
 mkdir -p data config
@@ -73,7 +109,7 @@ $EDITOR config/config.yaml
 
 然后删除 Compose 示例中 `openvpn` 服务的整个 `environment:` 配置块。挂载的文件将作为期望配置；只有 `version`、`server.endpoint` 和 `ipv4.network` 必填，其余默认值均在示例文件中说明。
 
-### 初始化并启动
+#### 初始化并启动
 
 ```bash
 docker compose up -d
@@ -87,7 +123,7 @@ entrypoint 只会初始化空数据目录，新实例必须提供有效 YAML 或
 
 YAML 是期望配置，SQLite 保存最近一次经操作员确认的 applied revision。之后 YAML 缺失或与 applied revision 不同时，`server run` 只告警并继续使用数据库快照，不会自动应用配置。
 
-### 创建并导出客户端
+#### 创建并导出客户端
 
 ```bash
 # 自动选择最低可用静态 IPv4，并直接输出 profile
@@ -111,6 +147,8 @@ chmod 600 laptop.ovpn
 
 ### 部署与运维
 
+下表的路径和编辑器默认值适用于 Docker。裸机默认值相对于解压目录，分别为 `config/config.yaml`、`data/` 和 `run/`，详见[裸机指南](docs/cn/v4/native-linux.md)。
+
 | 变量 | 运行时默认值 / Compose 回退值 | `.env.example` 值 | 说明 |
 |---|---|---|---|
 | `OVPN_IMAGE` | `szcq/openvpn:latest` | `szcq/openvpn:latest` | Compose 使用的镜像。生产环境应固定已发布的版本 tag。 |
@@ -124,6 +162,8 @@ chmod 600 laptop.ovpn
 | `EDITOR` | `nano` | 未设置 | 同时省略 `--editor/-e` 且未设置 `OVPN_EDITOR` 时使用的标准后备编辑器。 |
 
 ### 一次性环境变量初始化
+
+该流程适用于 Docker。裸机版无参数启动要求配置文件已经存在，请先复制并编辑包内示例。
 
 仅当空实例以 `OVPN_BOOTSTRAP_FROM_ENV=true` 初始化时才读取这些变量，并据此生成第一份规范 YAML。初始化完成后，程序只会告警并忽略这些变量，绝不会覆盖 YAML 或 SQLite；首次启动成功后应将开关设为 `false`。
 
@@ -224,11 +264,12 @@ docker compose start
 
 ## 文档
 
+- [Linux 裸机安装与运维](docs/cn/v4/native-linux.md)
 - [命令参考](docs/cn/v4/commands.md)
 - [操作手册](docs/cn/v4/operations.md)
 - [REST API 指南](docs/cn/v4/rest-api.md)
 - [数据升级与迁移政策](docs/cn/data-schema-upgrade-policy.md)
-- [镜像更新政策](docs/cn/image-update-policy.md)
+- [部署更新政策](docs/cn/image-update-policy.md)
 - 历史版本：[v1](docs/cn/v1/commands.md)、[v2](docs/cn/v2/commands.md)、[v3](docs/cn/v3/commands.md)
 
 ## 许可证
