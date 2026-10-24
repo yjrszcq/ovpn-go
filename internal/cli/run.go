@@ -88,6 +88,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			return runRuntimeStatus(args[1:], stdout, stderr)
 		}
 	}
+	if len(args) >= 2 && args[0] == "config" && args[1] == "edit" {
+		return runConfigEdit(args[2:], stdout, stderr)
+	}
 	if len(args) >= 2 && args[0] == "config" && args[1] == "validate" {
 		return runConfigValidate(args[2:], stdout, stderr)
 	}
