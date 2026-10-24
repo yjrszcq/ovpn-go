@@ -38,6 +38,11 @@ func TestAPIConfigurationDefaultsAndRoundTrip(t *testing.T) {
 	if err != nil || !equal {
 		t.Fatalf("roundtrip equal=%t err=%v", equal, err)
 	}
+	view := config.NewView(value)
+	view.API.Port = 0
+	if _, err := config.FromView(view); err == nil {
+		t.Fatal("JSON API port zero was accepted")
+	}
 	defaults := mustConfig(t, minimalConfig)
 	plan, err := config.BuildPlan(&defaults, value)
 	if err != nil || len(plan.Changes) != 4 || !plan.Impact.RestartRequired || plan.Impact.ProfileRedistribution {

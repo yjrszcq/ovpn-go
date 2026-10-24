@@ -78,12 +78,12 @@ func TestRuntimeHelperProcess(t *testing.T) {
 			return
 		}
 	case "api":
-		_ = os.WriteFile(filepath.Join(markerDir, "api-started"), []byte(strconv.Itoa(os.Getpid())), 0o600)
 		if os.Getenv("OVPN_RUNTIME_API_EXIT") == "1" {
 			os.Exit(6)
 		}
 		signals := make(chan os.Signal, 1)
 		signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+		_ = os.WriteFile(filepath.Join(markerDir, "api-started"), []byte(strconv.Itoa(os.Getpid())), 0o600)
 		for value := range signals {
 			if value == syscall.SIGHUP {
 				_ = os.WriteFile(filepath.Join(markerDir, "api-hup"), []byte("ok"), 0600)
