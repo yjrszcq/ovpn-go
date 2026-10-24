@@ -8,7 +8,7 @@ root = Path(tempfile.mkdtemp(prefix='ovpn-api-activation-'))
 (root / 'config').mkdir()
 (root / 'data').mkdir()
 (root / 'config/config.yaml').write_text('version: 1\nserver: {endpoint: 127.0.0.1}\nipv4: {network: 10.42.0.0/24}\napi: {enabled: false, listenIP: 0.0.0.0, port: 11940, cors: []}\n')
-(root / 'config/editor').write_text('#!/bin/sh\nsed -i "s/enabled: false/enabled: true/" "$1"\n')
+(root / "config/editor").write_text("#!/bin/sh\nsed -i '/^api:/,/^[^ ]/s/enabled: false/enabled: true/' \"$1\"\n")
 (root / 'config/editor').chmod(493)
 name = 'ovpn-api-activation-' + str(os.getpid())
 
@@ -57,7 +57,7 @@ try:
     assert json.loads(cli('config', 'show', '-j'))['revision'] == initial_revision
     cli('config', 'edit', '-e', '/etc/ovpn-conf/editor', '-a', '-y')
     wait(lambda: request('/healthz')[0] == 200)
-    for origin, expected in [('http://localhost:3000', 204), ('https://127.0.0.1:8080', 204), ('https://console.example', 400)]:
+    for origin, expected in [('http://localhost:3000', 400), ('https://127.0.0.1:8080', 400), ('https://console.example', 400)]:
         code, _, body = request('/api/v1/state', 'OPTIONS', headers={'Origin': origin, 'Access-Control-Request-Method': 'GET'})
         assert code == expected, (origin, code, body)
 
@@ -85,11 +85,10 @@ try:
             return True
     wait(closed)
     cli('runtime', 'health')
-    docker('exec', name, 'sh', '-ec', 'sed -i "s/enabled: false/enabled: true/" /etc/ovpn-conf/config.yaml')
     cli('config', 'edit', '--editor', '/etc/ovpn-conf/editor', '--apply', '--yes')
     wait(lambda: request('/healthz', address=newbase)[0] == 200)
     cli('runtime', 'health')
-    print('Actual container: editor+apply, ignored legacy API environment, local CORS, REST port/CORS update, REST disable response, CLI re-enable: PASS')
+    print('Actual container: editor+apply, ignored legacy API environment, disabled empty CORS, REST port/CORS update, REST disable response, CLI re-enable: PASS')
 except BaseException:
     print(docker('logs', name))
     raise

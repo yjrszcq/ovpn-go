@@ -31,7 +31,6 @@ type Authenticator interface {
 type handler struct {
 	authenticator Authenticator
 	origins       map[string]struct{}
-	localOrigins  bool
 	resources     Resources
 }
 
@@ -159,7 +158,7 @@ func NewHandler(authenticator Authenticator, allowedOrigins []string, resources 
 		}
 		origins[normalized] = struct{}{}
 	}
-	return &handler{authenticator: authenticator, origins: origins, localOrigins: len(allowedOrigins) == 0, resources: resources}, nil
+	return &handler{authenticator: authenticator, origins: origins, resources: resources}, nil
 }
 
 func (handler *handler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
@@ -363,16 +362,7 @@ func (handler *handler) applyCORS(response http.ResponseWriter, request *http.Re
 		return false
 	}
 	_, wildcard := handler.origins["*"]
-	localAllowed := false
-	if handler.localOrigins {
-		parsed, parseErr := url.Parse(origin)
-		if parseErr == nil {
-			name := strings.ToLower(parsed.Hostname())
-			_, validErr := configservice.NormalizeCORSOrigin(host)
-			localAllowed = validErr == nil && (name == "localhost" || name == "127.0.0.1")
-		}
-	}
-	if _, ok := handler.origins[host]; !ok && !wildcard && !localAllowed {
+	if _, ok := handler.origins[host]; !ok && !wildcard {
 		return false
 	}
 	response.Header().Set("Access-Control-Allow-Origin", origin)
