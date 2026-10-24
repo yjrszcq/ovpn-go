@@ -622,6 +622,12 @@ func selectAddressEditor(override string) (string, error) {
 		editor = "nano"
 	}
 	if strings.ContainsAny(editor, " \t\r\n") {
+		// Whitespace is valid in a literal executable path, never shell arguments.
+		if filepath.IsAbs(editor) && !strings.ContainsAny(editor, "\r\n") {
+			if info, err := os.Stat(editor); err == nil && info.Mode().IsRegular() {
+				return editor, nil
+			}
+		}
 		return "", fmt.Errorf("%w: editor must be a single executable path", clientservice.ErrInvalidRequest)
 	}
 	return editor, nil

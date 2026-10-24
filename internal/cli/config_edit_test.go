@@ -14,7 +14,7 @@ func TestConfigEditOnlyUsesConfiguredFileAndEditor(t *testing.T) {
 	if err := os.WriteFile(path, []byte("before"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	editor := filepath.Join(dir, "editor")
+	editor := filepath.Join(dir, "editor with spaces")
 	if err := os.WriteFile(editor, []byte("#!/bin/sh\nprintf 'edited' >\"$1\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
