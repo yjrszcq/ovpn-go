@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/artifact"
+	"github.com/yjrszcq/ovpn-go/internal/artifact"
 )
 
 func TestFileLocksCoordinateSharedAndExclusiveUsers(t *testing.T) {

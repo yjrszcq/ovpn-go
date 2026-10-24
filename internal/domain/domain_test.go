@@ -4,7 +4,7 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
 )
 
 func TestAddressFamiliesAndUnmapping(t *testing.T) {

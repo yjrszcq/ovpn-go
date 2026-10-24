@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	"github.com/yjrszcq/openvpn-docker/internal/pki"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/pki"
 )
 
 const LegacySchema = 3

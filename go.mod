@@ -1,4 +1,4 @@
-module github.com/yjrszcq/openvpn-docker
+module github.com/yjrszcq/ovpn-go
 
 go 1.27.3
 

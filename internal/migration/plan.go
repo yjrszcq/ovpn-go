@@ -8,9 +8,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/config"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/config"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 const (

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
 )
 
 const maxCryptoFileSize = 4 << 20

@@ -9,7 +9,7 @@ import (
 	"math"
 	"reflect"
 
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
 	"go.yaml.in/yaml/v3"
 )
 

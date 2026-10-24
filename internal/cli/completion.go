@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apperror"
+	"github.com/yjrszcq/ovpn-go/internal/apperror"
 )
 
 type completionSpec struct {

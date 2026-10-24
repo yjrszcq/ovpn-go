@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
 )
 
 // CommitCreateClientOperation atomically creates a client aggregate and

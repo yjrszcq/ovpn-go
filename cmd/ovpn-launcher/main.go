@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/yjrszcq/openvpn-docker/internal/bundle"
+	"github.com/yjrszcq/ovpn-go/internal/bundle"
 )
 
 func main() {

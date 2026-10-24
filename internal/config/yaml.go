@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	"github.com/yjrszcq/openvpn-docker/internal/ipam"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/ipam"
 	"go.yaml.in/yaml/v3"
 )
 

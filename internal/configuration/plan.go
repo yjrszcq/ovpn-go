@@ -10,10 +10,10 @@ import (
 	"net/netip"
 	"sort"
 
-	configservice "github.com/yjrszcq/openvpn-docker/internal/config"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	"github.com/yjrszcq/openvpn-docker/internal/ipam"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/ipam"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 var ErrPlanConflict = errors.New("configuration cannot be applied to current state")

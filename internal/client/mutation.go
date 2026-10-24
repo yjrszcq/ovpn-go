@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/artifact"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	"github.com/yjrszcq/openvpn-docker/internal/ipam"
-	"github.com/yjrszcq/openvpn-docker/internal/pki"
-	"github.com/yjrszcq/openvpn-docker/internal/render"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/artifact"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/ipam"
+	"github.com/yjrszcq/ovpn-go/internal/pki"
+	"github.com/yjrszcq/ovpn-go/internal/render"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 type MutationStore interface {

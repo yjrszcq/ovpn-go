@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yjrszcq/openvpn-docker/internal/artifact"
-	configservice "github.com/yjrszcq/openvpn-docker/internal/config"
-	configurationservice "github.com/yjrszcq/openvpn-docker/internal/configuration"
-	runtimecontrol "github.com/yjrszcq/openvpn-docker/internal/runtime"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/artifact"
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
+	configurationservice "github.com/yjrszcq/ovpn-go/internal/configuration"
+	runtimecontrol "github.com/yjrszcq/ovpn-go/internal/runtime"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 type ConfigApplyRequest struct {

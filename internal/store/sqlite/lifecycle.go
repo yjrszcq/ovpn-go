@@ -15,7 +15,7 @@ import (
 
 	sqlite3 "github.com/mattn/go-sqlite3"
 
-	"github.com/yjrszcq/openvpn-docker/internal/buildinfo"
+	"github.com/yjrszcq/ovpn-go/internal/buildinfo"
 )
 
 const (

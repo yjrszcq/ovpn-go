@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apikey"
-	"github.com/yjrszcq/openvpn-docker/internal/auditactor"
-	"github.com/yjrszcq/openvpn-docker/internal/buildinfo"
-	clientservice "github.com/yjrszcq/openvpn-docker/internal/client"
-	"github.com/yjrszcq/openvpn-docker/internal/compatibility"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	runtimecontrol "github.com/yjrszcq/openvpn-docker/internal/runtime"
-	statecontrol "github.com/yjrszcq/openvpn-docker/internal/state"
+	"github.com/yjrszcq/ovpn-go/internal/apikey"
+	"github.com/yjrszcq/ovpn-go/internal/auditactor"
+	"github.com/yjrszcq/ovpn-go/internal/buildinfo"
+	clientservice "github.com/yjrszcq/ovpn-go/internal/client"
+	"github.com/yjrszcq/ovpn-go/internal/compatibility"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	runtimecontrol "github.com/yjrszcq/ovpn-go/internal/runtime"
+	statecontrol "github.com/yjrszcq/ovpn-go/internal/state"
 )
 
 type fakeAuthenticator struct {

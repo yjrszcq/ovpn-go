@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	"github.com/yjrszcq/openvpn-docker/internal/ipam"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/ipam"
 )
 
 var ErrUnavailable = errors.New("IPv4 network dependency is unavailable")
@@ -148,6 +148,8 @@ func (reconciler *Reconciler) Cleanup(ctx context.Context, instanceID string) er
 	)
 }
 
+// Keep the historical rule comment across repository renames so existing
+// instances can reconcile and remove their firewall rules after an upgrade.
 func identities(instanceID string) (string, string, string, error) {
 	if !domain.ValidUUID(instanceID) {
 		return "", "", "", fmt.Errorf("invalid network instance UUID")

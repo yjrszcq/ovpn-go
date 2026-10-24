@@ -108,7 +108,7 @@ if __name__ == '__main__':
     parser.add_argument('--directory', type=Path, required=True)
     parser.add_argument('--tag', required=True)
     parser.add_argument('--commit', required=True)
-    parser.add_argument('--repository', default=os.environ.get('GITHUB_REPOSITORY', 'yjrszcq/openvpn-docker'))
+    parser.add_argument('--repository', default=os.environ.get('GITHUB_REPOSITORY', 'yjrszcq/ovpn-go'))
     parser.add_argument('--api-url', default='https://api.github.com')
     args = parser.parse_args()
     publish(args.directory, args.tag, args.commit, args.repository, args.api_url, os.environ['GH_TOKEN'])

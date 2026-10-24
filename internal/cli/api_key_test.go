@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apikey"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/apikey"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 func TestAPIKeyCLIWorkflow(t *testing.T) {

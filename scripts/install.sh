@@ -33,7 +33,7 @@ else
 fi
 case "$(uname -m)" in x86_64) architecture=amd64 ;; aarch64 | arm64) architecture=arm64 ;; *) fail 'unsupported CPU architecture' ;; esac
 version="${OVPN_VERSION:-}"
-repository='yjrszcq/openvpn-docker'
+repository='yjrszcq/ovpn-go'
 if [ -z "$version" ]; then
   location="$(curl --fail --silent --show-error --location --retry 3 --output /dev/null --write-out '%{url_effective}' "https://github.com/$repository/releases/latest")"
   version="${location##*/}"

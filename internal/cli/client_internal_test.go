@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	clientservice "github.com/yjrszcq/openvpn-docker/internal/client"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
+	clientservice "github.com/yjrszcq/ovpn-go/internal/client"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
 )
 
 func TestDisplayClientID(t *testing.T) {

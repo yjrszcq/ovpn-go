@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apikey"
+	"github.com/yjrszcq/ovpn-go/internal/apikey"
 )
 
 func TestAPIKeyLifecycleAndAudit(t *testing.T) {

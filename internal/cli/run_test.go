@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/buildinfo"
-	"github.com/yjrszcq/openvpn-docker/internal/cli"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/buildinfo"
+	"github.com/yjrszcq/ovpn-go/internal/cli"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 func run(args ...string) (int, string, string) {

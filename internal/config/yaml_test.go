@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yjrszcq/openvpn-docker/internal/config"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/config"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
 )
 
 const minimalConfig = `version: 1

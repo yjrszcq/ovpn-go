@@ -11,7 +11,7 @@ Compatibility covers Debian 13.7, Ubuntu 26.10, Rocky Linux 10.2, Alpine 3.24.3 
 Wait until the Release page contains both architecture archives and `SHA256SUMS`. The bootstrap requires Bash, curl, tar, a `sha256sum` tool and standard Linux command-line utilities. It does not install host packages.
 
 ```bash
-sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/openvpn-docker/main/scripts/install.sh')"
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
 ```
 
 The installer selects the latest stable Release and the host architecture, verifies the archive, installs to `/opt/ovpn`, creates `/usr/local/bin/ovpn`, and registers a systemd or OpenRC service. It leaves the service stopped and disabled. Existing unrelated commands, directories and service definitions are refused.
@@ -19,7 +19,7 @@ The installer selects the latest stable Release and the host architecture, verif
 To choose a directory and a published version, replace `vX.Y.Z`:
 
 ```bash
-sudo env OVPN_INSTALL_DIR=/opt/vpn OVPN_VERSION=vX.Y.Z bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/openvpn-docker/main/scripts/install.sh')"
+sudo env OVPN_INSTALL_DIR=/opt/vpn OVPN_VERSION=vX.Y.Z bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
 ```
 
 Use the same `OVPN_INSTALL_DIR` for subsequent updates. One managed `ovpn` service is supported per host.
@@ -80,7 +80,7 @@ The CLI and optional REST API retain their existing interfaces and `OVPN_*` over
 ## Update and recover
 
 ```bash
-sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/openvpn-docker/main/scripts/update.sh')"
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/update.sh')"
 ```
 
 The updater downloads and verifies first, then locks the installation. A running service is stopped, snapshotted, updated and restarted with a health check; a stopped service stays stopped. Your configuration, certificates, database, profiles, logs, permissions and service enablement are retained. A failed replacement or health check restores the previous program and snapshot. After an interrupted update, rerun the updater to recover the transaction. A retained `.update-backup/` means recovery needs attention; preserve it until the instance is healthy.

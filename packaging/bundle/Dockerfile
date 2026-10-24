@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
  && mkdir -p /bundle/runtime/bin \
  && for name in ovpn ovpn-broker ovpn-api; do \
       output="$name"; [ "$name" != ovpn ] || output=ovpn-core; \
-      go build -buildvcs=false -trimpath -ldflags "-s -w -linkmode external -extldflags -static -X github.com/yjrszcq/openvpn-docker/internal/buildinfo.Version=$IMAGE_VERSION -X github.com/yjrszcq/openvpn-docker/internal/buildinfo.Commit=$VCS_REF -X github.com/yjrszcq/openvpn-docker/internal/buildinfo.BuildDate=$BUILD_DATE" -o "/bundle/runtime/bin/$output" "./cmd/$name" || exit 1; \
+      go build -buildvcs=false -trimpath -ldflags "-s -w -linkmode external -extldflags -static -X github.com/yjrszcq/ovpn-go/internal/buildinfo.Version=$IMAGE_VERSION -X github.com/yjrszcq/ovpn-go/internal/buildinfo.Commit=$VCS_REF -X github.com/yjrszcq/ovpn-go/internal/buildinfo.BuildDate=$BUILD_DATE" -o "/bundle/runtime/bin/$output" "./cmd/$name" || exit 1; \
     done \
  && CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags '-s -w' -o /bundle/ovpn ./cmd/ovpn-launcher
 RUN apk add --no-cache flock

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
 )
 
 const BootstrapFromEnvironmentVariable = "OVPN_BOOTSTRAP_FROM_ENV"

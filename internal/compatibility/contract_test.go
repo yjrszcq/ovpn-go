@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yjrszcq/openvpn-docker/internal/compatibility"
+	"github.com/yjrszcq/ovpn-go/internal/compatibility"
 )
 
 func contractWithEmptyProbes(t *testing.T, data []byte) []byte {

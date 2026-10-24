@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/artifact"
-	configservice "github.com/yjrszcq/openvpn-docker/internal/config"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/artifact"
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 const operationInstanceID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"

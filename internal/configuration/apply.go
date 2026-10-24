@@ -12,13 +12,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/artifact"
-	configservice "github.com/yjrszcq/openvpn-docker/internal/config"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	"github.com/yjrszcq/openvpn-docker/internal/ipam"
-	"github.com/yjrszcq/openvpn-docker/internal/pki"
-	"github.com/yjrszcq/openvpn-docker/internal/render"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/artifact"
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/ipam"
+	"github.com/yjrszcq/ovpn-go/internal/pki"
+	"github.com/yjrszcq/ovpn-go/internal/render"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 type ApplyStore interface {

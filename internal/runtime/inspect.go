@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 var ErrUnavailable = errors.New("runtime management is unavailable")

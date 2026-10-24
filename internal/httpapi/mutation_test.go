@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apikey"
-	clientservice "github.com/yjrszcq/openvpn-docker/internal/client"
-	runtimecontrol "github.com/yjrszcq/openvpn-docker/internal/runtime"
+	"github.com/yjrszcq/ovpn-go/internal/apikey"
+	clientservice "github.com/yjrszcq/ovpn-go/internal/client"
+	runtimecontrol "github.com/yjrszcq/ovpn-go/internal/runtime"
 )
 
 type fakeMutator struct {

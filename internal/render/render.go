@@ -12,9 +12,9 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/yjrszcq/openvpn-docker/internal/compatibility"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	"github.com/yjrszcq/openvpn-docker/internal/ipam"
+	"github.com/yjrszcq/ovpn-go/internal/compatibility"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/ipam"
 )
 
 const DefaultTemplateRoot = "/usr/local/share/openvpn-container/templates"

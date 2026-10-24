@@ -10,9 +10,9 @@ import (
 	"net/netip"
 	"time"
 
-	configservice "github.com/yjrszcq/openvpn-docker/internal/config"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	"github.com/yjrszcq/openvpn-docker/internal/ipam"
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/ipam"
 )
 
 // InstanceState is the authoritative instance and current applied config view.

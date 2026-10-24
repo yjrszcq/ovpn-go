@@ -10,14 +10,14 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apperror"
-	"github.com/yjrszcq/openvpn-docker/internal/artifact"
-	"github.com/yjrszcq/openvpn-docker/internal/auditactor"
-	"github.com/yjrszcq/openvpn-docker/internal/buildinfo"
-	"github.com/yjrszcq/openvpn-docker/internal/initialize"
-	migrationservice "github.com/yjrszcq/openvpn-docker/internal/migration"
-	"github.com/yjrszcq/openvpn-docker/internal/render"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/apperror"
+	"github.com/yjrszcq/ovpn-go/internal/artifact"
+	"github.com/yjrszcq/ovpn-go/internal/auditactor"
+	"github.com/yjrszcq/ovpn-go/internal/buildinfo"
+	"github.com/yjrszcq/ovpn-go/internal/initialize"
+	migrationservice "github.com/yjrszcq/ovpn-go/internal/migration"
+	"github.com/yjrszcq/ovpn-go/internal/render"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 func runMigrationPlan(args []string, stdout, stderr io.Writer) int {

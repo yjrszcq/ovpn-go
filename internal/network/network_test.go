@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	configservice "github.com/yjrszcq/openvpn-docker/internal/config"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
 )
 
 func TestExecRunnerPreservesCommandExitStatus(t *testing.T) {

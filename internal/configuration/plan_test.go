@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	configservice "github.com/yjrszcq/openvpn-docker/internal/config"
-	"github.com/yjrszcq/openvpn-docker/internal/configuration"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
+	"github.com/yjrszcq/ovpn-go/internal/configuration"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 const (

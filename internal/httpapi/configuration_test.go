@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apikey"
-	configservice "github.com/yjrszcq/openvpn-docker/internal/config"
-	configurationservice "github.com/yjrszcq/openvpn-docker/internal/configuration"
-	runtimecontrol "github.com/yjrszcq/openvpn-docker/internal/runtime"
+	"github.com/yjrszcq/ovpn-go/internal/apikey"
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
+	configurationservice "github.com/yjrszcq/ovpn-go/internal/configuration"
+	runtimecontrol "github.com/yjrszcq/ovpn-go/internal/runtime"
 )
 
 const testConfigurationDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"

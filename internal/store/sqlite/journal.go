@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/auditactor"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/auditactor"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
 )
 
 type OperationState string

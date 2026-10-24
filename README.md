@@ -1,8 +1,8 @@
-# OpenVPN Server Docker Image
+# ovpn-go
 
 [中文](README_CN.md)
 
-This image runs OpenVPN Community Edition with a Go control plane and SQLite state. It is intended for Linux hosts that need certificate-based IPv4 TUN access without a web interface.
+ovpn-go manages OpenVPN Community Edition servers with a Go control plane and SQLite state. It supports Docker and self-contained Linux deployments for certificate-based IPv4 TUN access without a web interface.
 
 ## Features
 

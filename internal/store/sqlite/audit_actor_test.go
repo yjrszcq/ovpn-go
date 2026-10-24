@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apikey"
-	"github.com/yjrszcq/openvpn-docker/internal/auditactor"
+	"github.com/yjrszcq/ovpn-go/internal/apikey"
+	"github.com/yjrszcq/ovpn-go/internal/auditactor"
 )
 
 func TestAuditActorIsAddedWithoutReplacingPayload(t *testing.T) {

@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/artifact"
-	configservice "github.com/yjrszcq/openvpn-docker/internal/config"
-	configurationservice "github.com/yjrszcq/openvpn-docker/internal/configuration"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/artifact"
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
+	configurationservice "github.com/yjrszcq/ovpn-go/internal/configuration"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 func TestConfigShowExportAndPlanUseSQLiteAppliedState(t *testing.T) {

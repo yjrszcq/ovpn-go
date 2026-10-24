@@ -1,8 +1,8 @@
-# OpenVPN 服务端 Docker 镜像
+# ovpn-go
 
 [English](README.md)
 
-本镜像使用 Go 控制面和 SQLite 运行 OpenVPN Community Edition，适合在 Linux 主机上部署基于证书的 IPv4 TUN VPN，不提供 Web 管理界面。
+ovpn-go 使用 Go 控制面和 SQLite 管理 OpenVPN Community Edition 服务端，支持 Docker 与自包含 Linux 部署，提供基于证书的 IPv4 TUN VPN，不提供 Web 管理界面。
 
 ## 主要能力
 

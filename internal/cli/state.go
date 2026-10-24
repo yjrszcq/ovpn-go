@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apperror"
-	statecontrol "github.com/yjrszcq/openvpn-docker/internal/state"
+	"github.com/yjrszcq/ovpn-go/internal/apperror"
+	statecontrol "github.com/yjrszcq/ovpn-go/internal/state"
 )
 
 func runState(args []string, stdout, stderr io.Writer, doctor bool) int {

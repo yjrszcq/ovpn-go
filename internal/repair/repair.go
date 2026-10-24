@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/yjrszcq/openvpn-docker/internal/derived"
-	"github.com/yjrszcq/openvpn-docker/internal/pki"
-	statecontrol "github.com/yjrszcq/openvpn-docker/internal/state"
+	"github.com/yjrszcq/ovpn-go/internal/derived"
+	"github.com/yjrszcq/ovpn-go/internal/pki"
+	statecontrol "github.com/yjrszcq/ovpn-go/internal/state"
 )
 
 type Action struct {

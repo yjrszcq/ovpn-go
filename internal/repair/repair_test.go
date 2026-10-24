@@ -3,7 +3,7 @@ package repair
 import (
 	"testing"
 
-	statecontrol "github.com/yjrszcq/openvpn-docker/internal/state"
+	statecontrol "github.com/yjrszcq/ovpn-go/internal/state"
 )
 
 func TestBuildPlanDeduplicatesSafeActionsAndRetainsBlockers(t *testing.T) {

@@ -8,12 +8,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/yjrszcq/openvpn-docker/internal/artifact"
-	clientservice "github.com/yjrszcq/openvpn-docker/internal/client"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	"github.com/yjrszcq/openvpn-docker/internal/pki"
-	runtimecontrol "github.com/yjrszcq/openvpn-docker/internal/runtime"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/artifact"
+	clientservice "github.com/yjrszcq/ovpn-go/internal/client"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/pki"
+	runtimecontrol "github.com/yjrszcq/ovpn-go/internal/runtime"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 type createClientRequest struct {

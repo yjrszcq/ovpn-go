@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apperror"
+	"github.com/yjrszcq/ovpn-go/internal/apperror"
 )
 
 func TestWriteJSONDoesNotExposeCause(t *testing.T) {

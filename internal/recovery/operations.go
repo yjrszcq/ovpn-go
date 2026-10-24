@@ -9,8 +9,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/artifact"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/artifact"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 var ErrOperationConflict = errors.New("operation recovery evidence conflicts")

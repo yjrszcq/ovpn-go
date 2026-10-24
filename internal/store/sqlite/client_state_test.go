@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
 )
 
 func storeWithInstance(t *testing.T) (*Store, InstanceState) {

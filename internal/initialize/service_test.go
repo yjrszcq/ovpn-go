@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/compatibility"
-	"github.com/yjrszcq/openvpn-docker/internal/pki"
-	"github.com/yjrszcq/openvpn-docker/internal/render"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/compatibility"
+	"github.com/yjrszcq/ovpn-go/internal/pki"
+	"github.com/yjrszcq/ovpn-go/internal/render"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 const testYAML = `version: 1

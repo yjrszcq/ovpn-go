@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/yjrszcq/openvpn-docker/internal/compatibility"
+	"github.com/yjrszcq/ovpn-go/internal/compatibility"
 )
 
 type fakeRunner struct {

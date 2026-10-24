@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/yjrszcq/openvpn-docker/internal/cli"
+	"github.com/yjrszcq/ovpn-go/internal/cli"
 )
 
 func main() {

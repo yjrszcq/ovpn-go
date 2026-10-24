@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"syscall"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apperror"
-	"github.com/yjrszcq/openvpn-docker/internal/initialize"
-	runtimecontrol "github.com/yjrszcq/openvpn-docker/internal/runtime"
+	"github.com/yjrszcq/ovpn-go/internal/apperror"
+	"github.com/yjrszcq/ovpn-go/internal/initialize"
+	runtimecontrol "github.com/yjrszcq/ovpn-go/internal/runtime"
 )
 
 func runRuntimeStatus(args []string, stdout, stderr io.Writer) int {

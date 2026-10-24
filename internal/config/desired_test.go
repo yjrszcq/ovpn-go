@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/yjrszcq/openvpn-docker/internal/config"
+	"github.com/yjrszcq/ovpn-go/internal/config"
 )
 
 func TestUpdateDesiredFileUsesDigestCASAndAtomicMode(t *testing.T) {

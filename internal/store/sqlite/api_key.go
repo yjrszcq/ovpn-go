@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apikey"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/apikey"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
 )
 
 func (store *Store) CreateAPIKey(ctx context.Context, instanceID string, record apikey.Record, operationID string) error {

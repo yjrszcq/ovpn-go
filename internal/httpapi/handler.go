@@ -10,16 +10,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apikey"
-	"github.com/yjrszcq/openvpn-docker/internal/auditactor"
-	"github.com/yjrszcq/openvpn-docker/internal/buildinfo"
-	clientservice "github.com/yjrszcq/openvpn-docker/internal/client"
-	"github.com/yjrszcq/openvpn-docker/internal/compatibility"
-	configservice "github.com/yjrszcq/openvpn-docker/internal/config"
-	configurationservice "github.com/yjrszcq/openvpn-docker/internal/configuration"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	runtimecontrol "github.com/yjrszcq/openvpn-docker/internal/runtime"
-	statecontrol "github.com/yjrszcq/openvpn-docker/internal/state"
+	"github.com/yjrszcq/ovpn-go/internal/apikey"
+	"github.com/yjrszcq/ovpn-go/internal/auditactor"
+	"github.com/yjrszcq/ovpn-go/internal/buildinfo"
+	clientservice "github.com/yjrszcq/ovpn-go/internal/client"
+	"github.com/yjrszcq/ovpn-go/internal/compatibility"
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
+	configurationservice "github.com/yjrszcq/ovpn-go/internal/configuration"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	runtimecontrol "github.com/yjrszcq/ovpn-go/internal/runtime"
+	statecontrol "github.com/yjrszcq/ovpn-go/internal/state"
 )
 
 const maxAuthorizationBytes = 512

@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/artifact"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	networkcontrol "github.com/yjrszcq/openvpn-docker/internal/network"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/artifact"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	networkcontrol "github.com/yjrszcq/ovpn-go/internal/network"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 type NetworkCoordinator interface {

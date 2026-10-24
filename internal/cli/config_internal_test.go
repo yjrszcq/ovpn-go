@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	configservice "github.com/yjrszcq/openvpn-docker/internal/config"
-	configurationservice "github.com/yjrszcq/openvpn-docker/internal/configuration"
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
+	configurationservice "github.com/yjrszcq/ovpn-go/internal/configuration"
 )
 
 func TestDataDirectoryEmpty(t *testing.T) {

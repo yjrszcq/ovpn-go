@@ -29,13 +29,13 @@ RUN test -n "$GO_RUNTIME_VERSION" \
 
 RUN mkdir -p /out/usr/local/lib/openvpn-container/go \
     && go build -buildvcs=false -trimpath \
-       -ldflags "-s -w -X github.com/yjrszcq/openvpn-docker/internal/buildinfo.Version=$GO_RUNTIME_VERSION -X github.com/yjrszcq/openvpn-docker/internal/buildinfo.Commit=$VCS_REF -X github.com/yjrszcq/openvpn-docker/internal/buildinfo.BuildDate=$BUILD_DATE" \
+       -ldflags "-s -w -X github.com/yjrszcq/ovpn-go/internal/buildinfo.Version=$GO_RUNTIME_VERSION -X github.com/yjrszcq/ovpn-go/internal/buildinfo.Commit=$VCS_REF -X github.com/yjrszcq/ovpn-go/internal/buildinfo.BuildDate=$BUILD_DATE" \
        -o /out/usr/local/lib/openvpn-container/go/ovpn ./cmd/ovpn \
     && go build -buildvcs=false -trimpath \
-       -ldflags "-s -w -X github.com/yjrszcq/openvpn-docker/internal/buildinfo.Version=$GO_RUNTIME_VERSION -X github.com/yjrszcq/openvpn-docker/internal/buildinfo.Commit=$VCS_REF -X github.com/yjrszcq/openvpn-docker/internal/buildinfo.BuildDate=$BUILD_DATE" \
+       -ldflags "-s -w -X github.com/yjrszcq/ovpn-go/internal/buildinfo.Version=$GO_RUNTIME_VERSION -X github.com/yjrszcq/ovpn-go/internal/buildinfo.Commit=$VCS_REF -X github.com/yjrszcq/ovpn-go/internal/buildinfo.BuildDate=$BUILD_DATE" \
        -o /out/usr/local/lib/openvpn-container/go/ovpn-broker ./cmd/ovpn-broker \
     && go build -buildvcs=false -trimpath \
-       -ldflags "-s -w -X github.com/yjrszcq/openvpn-docker/internal/buildinfo.Version=$GO_RUNTIME_VERSION -X github.com/yjrszcq/openvpn-docker/internal/buildinfo.Commit=$VCS_REF -X github.com/yjrszcq/openvpn-docker/internal/buildinfo.BuildDate=$BUILD_DATE" \
+       -ldflags "-s -w -X github.com/yjrszcq/ovpn-go/internal/buildinfo.Version=$GO_RUNTIME_VERSION -X github.com/yjrszcq/ovpn-go/internal/buildinfo.Commit=$VCS_REF -X github.com/yjrszcq/ovpn-go/internal/buildinfo.BuildDate=$BUILD_DATE" \
        -o /out/usr/local/lib/openvpn-container/go/ovpn-api ./cmd/ovpn-api \
     && for binary in /out/usr/local/lib/openvpn-container/go/ovpn /out/usr/local/lib/openvpn-container/go/ovpn-broker /out/usr/local/lib/openvpn-container/go/ovpn-api; do \
          ldd "$binary" >"/tmp/$(basename "$binary").ldd" || exit 1; \

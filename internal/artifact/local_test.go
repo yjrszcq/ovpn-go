@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yjrszcq/openvpn-docker/internal/artifact"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/artifact"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
 )
 
 const operationID = "41414141-4141-4414-8414-414141414141"

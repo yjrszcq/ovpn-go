@@ -16,12 +16,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yjrszcq/openvpn-docker/internal/artifact"
-	"github.com/yjrszcq/openvpn-docker/internal/config"
-	"github.com/yjrszcq/openvpn-docker/internal/domain"
-	"github.com/yjrszcq/openvpn-docker/internal/initialize"
-	"github.com/yjrszcq/openvpn-docker/internal/ipam"
-	"github.com/yjrszcq/openvpn-docker/internal/pki"
+	"github.com/yjrszcq/ovpn-go/internal/artifact"
+	"github.com/yjrszcq/ovpn-go/internal/config"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
+	"github.com/yjrszcq/ovpn-go/internal/initialize"
+	"github.com/yjrszcq/ovpn-go/internal/ipam"
+	"github.com/yjrszcq/ovpn-go/internal/pki"
 )
 
 const maxLegacyMetadata = 4 << 20

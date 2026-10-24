@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	configservice "github.com/yjrszcq/openvpn-docker/internal/config"
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
 )
 
 func TestPrepareInitializationConfigCreatesAndReusesYAML(t *testing.T) {

@@ -4,7 +4,7 @@ set -eu
 project_root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_root"
 
-expected='github.com/yjrszcq/openvpn-docker
+expected='github.com/yjrszcq/ovpn-go
 github.com/mattn/go-sqlite3 v1.14.48
 go.yaml.in/yaml/v3 v3.0.4
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405'

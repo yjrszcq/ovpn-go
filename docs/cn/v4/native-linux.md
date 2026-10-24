@@ -11,7 +11,7 @@ x86-64 使用 `linux-amd64`，AArch64 使用 `linux-arm64`。宿主需要 Linux 
 请等待 Release 页面上的两个架构压缩包和 `SHA256SUMS` 齐全后再安装。引导脚本需要 Bash、curl、tar、`sha256sum` 及常见 Linux 命令行工具，不会安装宿主软件包。
 
 ```bash
-sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/openvpn-docker/main/scripts/install.sh')"
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
 ```
 
 安装器自动选择最新稳定 Release 和宿主架构，验证压缩包后安装到 `/opt/ovpn`，创建 `/usr/local/bin/ovpn`，并注册 systemd 或 OpenRC 服务。首次安装保持服务停止，也不启用开机启动。遇到无关的已有命令、目录或服务定义时拒绝覆盖。
@@ -19,7 +19,7 @@ sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/openvpn-do
 需要指定目录和已发布版本时，替换 `vX.Y.Z`：
 
 ```bash
-sudo env OVPN_INSTALL_DIR=/opt/vpn OVPN_VERSION=vX.Y.Z bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/openvpn-docker/main/scripts/install.sh')"
+sudo env OVPN_INSTALL_DIR=/opt/vpn OVPN_VERSION=vX.Y.Z bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
 ```
 
 后续更新请使用相同的 `OVPN_INSTALL_DIR`。每台宿主支持一个由安装器管理的 `ovpn` 服务。
@@ -80,7 +80,7 @@ CLI、可选 REST API 和已有 `OVPN_*` 覆盖继续有效。覆盖按进程生
 ## 更新与恢复
 
 ```bash
-sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/openvpn-docker/main/scripts/update.sh')"
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/update.sh')"
 ```
 
 更新器先下载验证，再锁定安装目录。服务原先运行时，会停止、保存快照、更新并重启检查健康；原先停止则继续停止。用户配置、证书、数据库、客户端配置、日志、权限和开机启动状态会保留。替换或健康检查失败时恢复旧程序和快照。更新中断后，再次执行更新器即可恢复事务；若 `.update-backup/` 仍保留，表示恢复需要处理，请在实例恢复健康前保留它。

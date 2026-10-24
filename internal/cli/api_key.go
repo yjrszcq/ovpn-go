@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apikey"
-	"github.com/yjrszcq/openvpn-docker/internal/apperror"
-	"github.com/yjrszcq/openvpn-docker/internal/auditactor"
-	"github.com/yjrszcq/openvpn-docker/internal/initialize"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/apikey"
+	"github.com/yjrszcq/ovpn-go/internal/apperror"
+	"github.com/yjrszcq/ovpn-go/internal/auditactor"
+	"github.com/yjrszcq/ovpn-go/internal/initialize"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 func runAPIKeyCreate(args []string, stdout, stderr io.Writer) int {

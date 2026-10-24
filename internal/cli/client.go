@@ -13,16 +13,16 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/yjrszcq/openvpn-docker/internal/apperror"
-	"github.com/yjrszcq/openvpn-docker/internal/artifact"
-	"github.com/yjrszcq/openvpn-docker/internal/auditactor"
-	clientservice "github.com/yjrszcq/openvpn-docker/internal/client"
-	"github.com/yjrszcq/openvpn-docker/internal/compatibility"
-	"github.com/yjrszcq/openvpn-docker/internal/initialize"
-	"github.com/yjrszcq/openvpn-docker/internal/pki"
-	"github.com/yjrszcq/openvpn-docker/internal/render"
-	runtimecontrol "github.com/yjrszcq/openvpn-docker/internal/runtime"
-	storesqlite "github.com/yjrszcq/openvpn-docker/internal/store/sqlite"
+	"github.com/yjrszcq/ovpn-go/internal/apperror"
+	"github.com/yjrszcq/ovpn-go/internal/artifact"
+	"github.com/yjrszcq/ovpn-go/internal/auditactor"
+	clientservice "github.com/yjrszcq/ovpn-go/internal/client"
+	"github.com/yjrszcq/ovpn-go/internal/compatibility"
+	"github.com/yjrszcq/ovpn-go/internal/initialize"
+	"github.com/yjrszcq/ovpn-go/internal/pki"
+	"github.com/yjrszcq/ovpn-go/internal/render"
+	runtimecontrol "github.com/yjrszcq/ovpn-go/internal/runtime"
+	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
 func runClientList(args []string, stdout, stderr io.Writer) int {
