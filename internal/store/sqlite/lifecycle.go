@@ -22,7 +22,7 @@ const (
 	DefaultPath     = "/etc/openvpn/meta/state.db"
 	DataSchema      = buildinfo.DataSchema
 	InitialRevision = 1
-	CurrentRevision = 9
+	CurrentRevision = 10
 	BusyTimeoutMS   = 30000
 )
 
@@ -394,6 +394,7 @@ func validateSchemaObjects(ctx context.Context, database *sql.DB) error {
 		"schema_metadata":     {},
 		"instances":           {},
 		"applied_config":      {},
+		"applied_api_config":  {},
 		"networks":            {},
 		"address_pools":       {},
 		"pushed_routes":       {},

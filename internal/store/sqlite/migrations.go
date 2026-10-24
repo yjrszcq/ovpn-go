@@ -20,6 +20,7 @@ var migrations = []migration{
 	{revision: 7, apply: migrateReusableArtifactKeys},
 	{revision: 8, apply: migrateHistoricalNetworks},
 	{revision: 9, apply: migrateAPIKeys},
+	{revision: 10, apply: migrateAPIConfiguration},
 }
 
 func migrateAPIKeys(ctx context.Context, transaction *sql.Tx) error {
@@ -385,6 +386,24 @@ CREATE TABLE dns_servers (
 ) STRICT`)
 	if err != nil {
 		return classifySQLite("migrate configuration state", err)
+	}
+	return nil
+}
+
+func migrateAPIConfiguration(ctx context.Context, transaction *sql.Tx) error {
+	_, err := transaction.ExecContext(ctx, `
+ CREATE TABLE applied_api_config (
+ instance_id TEXT NOT NULL,
+ revision INTEGER NOT NULL,
+ enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+ listen_ip TEXT NOT NULL CHECK(length(listen_ip)>0),
+ port INTEGER NOT NULL CHECK(port BETWEEN 1 AND 65535),
+ cors_json TEXT NOT NULL,
+ PRIMARY KEY(instance_id, revision),
+ FOREIGN KEY(instance_id, revision) REFERENCES applied_config(instance_id,revision) ON DELETE CASCADE
+ ) STRICT`)
+	if err != nil {
+		return classifySQLite("migrate API configuration", err)
 	}
 	return nil
 }

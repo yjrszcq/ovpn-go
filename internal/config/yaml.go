@@ -33,9 +33,17 @@ var (
 
 type yamlConfig struct {
 	Version int         `yaml:"version"`
+	API     yamlAPI     `yaml:"api"`
 	Server  yamlServer  `yaml:"server"`
 	IPv4    yamlIPv4    `yaml:"ipv4"`
 	Logging yamlLogging `yaml:"logging"`
+}
+
+type yamlAPI struct {
+	Enabled  bool     `yaml:"enabled"`
+	ListenIP *string  `yaml:"listenIP"`
+	Port     *uint16  `yaml:"port"`
+	CORS     []string `yaml:"cors"`
 }
 
 type yamlServer struct {
@@ -216,7 +224,12 @@ func normalize(raw yamlConfig) (domain.Config, error) {
 		backups = *raw.Logging.Backups
 	}
 
+	api, err := normalizeAPI(raw.API)
+	if err != nil {
+		return domain.Config{}, err
+	}
 	return domain.Config{
+		API:             api,
 		Endpoint:        endpoint,
 		Protocol:        protocol,
 		TransportFamily: transportFamily,
@@ -256,7 +269,8 @@ func normalizeEndpoint(input string) (string, error) {
 
 // View is the stable JSON-friendly normalized configuration shape.
 type View struct {
-	Version int `json:"version"`
+	API     *domain.APIConfig `json:"api,omitempty"`
+	Version int               `json:"version"`
 	Server  struct {
 		Endpoint       string `json:"endpoint"`
 		Protocol       string `json:"protocol"`
@@ -283,6 +297,12 @@ type View struct {
 func NewView(value domain.Config) View {
 	var view View
 	view.Version = 1
+	api := EffectiveAPI(value.API)
+	defaults := DefaultAPI()
+	if api.Enabled || api.ListenIP != defaults.ListenIP || api.Port != defaults.Port || len(api.CORS) > 0 {
+		api.CORS = append([]string{}, api.CORS...)
+		view.API = &api
+	}
 	view.Server.Endpoint = value.Endpoint
 	view.Server.Protocol = string(value.Protocol)
 	view.Server.Family = string(value.TransportFamily)
@@ -313,7 +333,12 @@ func FromView(view View) (domain.Config, error) {
 	dynamicPoolSize := view.IPv4.DynamicPoolSize
 	natInterface := view.IPv4.NATInterface
 	maxBytes, backups := view.Logging.MaxBytes, view.Logging.Backups
+	api := DefaultAPI()
+	if view.API != nil {
+		api = *view.API
+	}
 	return normalize(yamlConfig{
+		API:     yamlAPI{Enabled: api.Enabled, ListenIP: &api.ListenIP, Port: &api.Port, CORS: api.CORS},
 		Version: view.Version,
 		Server:  yamlServer{Endpoint: view.Server.Endpoint, ClientToClient: &clientToClient, Transport: yamlTransport{Protocol: &protocol, Family: &family, Port: &port}},
 		IPv4:    yamlIPv4{Network: view.IPv4.Network, DynamicPoolSize: &dynamicPoolSize, NAT: yamlNAT{Enabled: view.IPv4.NATEnabled, Interface: &natInterface}, RedirectGateway: view.IPv4.RedirectGateway, DNS: view.IPv4.DNS, Routes: view.IPv4.Routes},

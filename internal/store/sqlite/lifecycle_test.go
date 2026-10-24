@@ -190,7 +190,7 @@ func TestOpenMigratesRevisionOne(t *testing.T) {
 func TestOpenMigratesRevisionFourLeaseUniqueness(t *testing.T) {
 	store, instance := storeWithInstance(t)
 	path := store.Path()
-	if _, err := store.db.Exec("DROP TABLE api_keys"); err != nil {
+	if _, err := store.db.Exec("DROP TABLE applied_api_config; DROP TABLE api_keys"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.db.Exec("DROP INDEX client_leases_network_address"); err != nil {
@@ -286,7 +286,7 @@ func TestOpenMigratesRevisionEightAPIKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer opened.Close()
-	if opened.Metadata().DatabaseRevision != 9 {
+	if opened.Metadata().DatabaseRevision != CurrentRevision {
 		t.Fatalf("revision=%d", opened.Metadata().DatabaseRevision)
 	}
 	var strictSQL string

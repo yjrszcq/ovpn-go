@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -192,6 +193,21 @@ WHERE i.id = ?`, instanceID).Scan(
 	configValue.IPv4.NATEnabled = natEnabled == 1
 	configValue.IPv4.RedirectGateway = redirectGateway == 1
 	configValue.Logging.Backups = logBackups
+	configValue.API = configservice.DefaultAPI()
+	if store.metadata.DatabaseRevision >= 10 {
+		var apiEnabled int
+		var origins string
+		apiErr := store.db.QueryRowContext(ctx, `SELECT enabled,listen_ip,port,cors_json FROM applied_api_config WHERE instance_id=? AND revision=?`, instanceID, revision).Scan(&apiEnabled, &configValue.API.ListenIP, &configValue.API.Port, &origins)
+		if apiErr == nil {
+			configValue.API.Enabled = apiEnabled == 1
+			if err := json.Unmarshal([]byte(origins), &configValue.API.CORS); err != nil {
+				return InstanceState{}, fmt.Errorf("%w: invalid API origins", ErrSchema)
+			}
+		} else if !errors.Is(apiErr, sql.ErrNoRows) {
+			return InstanceState{}, fmt.Errorf("load API configuration: %w", apiErr)
+		}
+
+	}
 
 	var networkPacked []byte
 	var prefix int
@@ -278,6 +294,17 @@ INSERT INTO applied_config(
 		boolInt(configValue.IPv4.RedirectGateway), configValue.Logging.MaxBytes,
 		configValue.Logging.Backups); err != nil {
 		return classifySQLite("insert applied configuration", err)
+	}
+	if configservice.NewView(configValue).API == nil {
+		return nil
+	}
+	api := configservice.EffectiveAPI(configValue.API)
+	origins, err := json.Marshal(api.CORS)
+	if err != nil {
+		return err
+	}
+	if _, err := transaction.ExecContext(ctx, `INSERT INTO applied_api_config(instance_id,revision,enabled,listen_ip,port,cors_json) VALUES(?,?,?,?,?,?)`, instanceID, snapshot.Revision, boolInt(api.Enabled), api.ListenIP, api.Port, string(origins)); err != nil {
+		return classifySQLite("insert applied API configuration", err)
 	}
 	return nil
 }

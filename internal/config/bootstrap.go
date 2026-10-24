@@ -82,6 +82,18 @@ func BootstrapConfig(lookup EnvironmentLookup) (domain.Config, error) {
 	if config.Logging.Backups, err = optionalUint32(lookup, "OVPN_BOOTSTRAP_LOG_BACKUPS"); err != nil {
 		return domain.Config{}, err
 	}
+	if config.API.Enabled, err = boolValue(lookup, "OVPN_BOOTSTRAP_API_ENABLED"); err != nil {
+		return domain.Config{}, err
+	}
+	if config.API.ListenIP, err = optionalString(lookup, "OVPN_BOOTSTRAP_API_LISTEN_IP"); err != nil {
+		return domain.Config{}, err
+	}
+	if config.API.Port, err = optionalUint16(lookup, "OVPN_BOOTSTRAP_API_PORT"); err != nil {
+		return domain.Config{}, err
+	}
+	if config.API.CORS, err = listValue(lookup, "OVPN_BOOTSTRAP_API_CORS"); err != nil {
+		return domain.Config{}, err
+	}
 	value, err := normalize(config)
 	if err != nil {
 		return domain.Config{}, fmt.Errorf("%w: %v", ErrBootstrapInput, err)

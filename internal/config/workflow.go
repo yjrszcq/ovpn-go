@@ -86,10 +86,18 @@ func Show(snapshot AppliedSnapshot) (AppliedView, error) {
 }
 
 type exportConfig struct {
+	API     *exportAPI    `yaml:"api,omitempty"`
 	Version int           `yaml:"version"`
 	Server  exportServer  `yaml:"server"`
 	IPv4    exportIPv4    `yaml:"ipv4"`
 	Logging exportLogging `yaml:"logging"`
+}
+
+type exportAPI struct {
+	Enabled  bool     `yaml:"enabled"`
+	ListenIP string   `yaml:"listenIP"`
+	Port     uint16   `yaml:"port"`
+	CORS     []string `yaml:"cors"`
 }
 
 type exportServer struct {
@@ -155,6 +163,10 @@ func ExportYAML(snapshot AppliedSnapshot) ([]byte, error) {
 			MaxBytes: view.Logging.MaxBytes,
 			Backups:  view.Logging.Backups,
 		},
+	}
+	if view.API != nil {
+		api := view.API
+		exported.API = &exportAPI{Enabled: api.Enabled, ListenIP: api.ListenIP, Port: api.Port, CORS: api.CORS}
 	}
 	data, err := yaml.Marshal(exported)
 	if err != nil {
@@ -246,7 +258,12 @@ func BuildPlan(applied *AppliedSnapshot, desired domain.Config) (Plan, error) {
 
 func configFields(value domain.Config) []fieldValue {
 	view := NewView(value)
+	api := EffectiveAPI(value.API)
 	return []fieldValue{
+		{"api.enabled", api.Enabled},
+		{"api.listenIP", api.ListenIP},
+		{"api.port", api.Port},
+		{"api.cors", api.CORS},
 		{"server.endpoint", view.Server.Endpoint},
 		{"server.transport.protocol", view.Server.Protocol},
 		{"server.transport.family", view.Server.Family},

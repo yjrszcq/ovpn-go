@@ -26,6 +26,7 @@ type Config struct {
 	Port            uint16
 	ClientToClient  bool
 	IPv4            IPv4Config
+	API             APIConfig
 	Logging         LoggingConfig
 }
 
@@ -44,4 +45,12 @@ type IPv4Config struct {
 type LoggingConfig struct {
 	MaxBytes uint64
 	Backups  uint32
+}
+
+// APIConfig controls the optional REST listener and browser origin allowlist.
+type APIConfig struct {
+	Enabled  bool     `json:"enabled"`
+	ListenIP string   `json:"listen_ip"`
+	Port     uint16   `json:"port"`
+	CORS     []string `json:"cors"`
 }

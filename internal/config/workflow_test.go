@@ -151,7 +151,7 @@ func TestInitialPlanListsEveryField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !plan.Initial || plan.InSync || plan.CurrentRevision != 0 || plan.TargetRevision != 1 || len(plan.Changes) != 14 {
+	if !plan.Initial || plan.InSync || plan.CurrentRevision != 0 || plan.TargetRevision != 1 || len(plan.Changes) != 18 {
 		t.Fatalf("unexpected initial plan: %+v", plan)
 	}
 	if !plan.Impact.RestartRequired || !plan.Impact.AddressRemap || !plan.Impact.FirewallReconcile || !plan.Impact.ProfileRedistribution {
