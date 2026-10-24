@@ -302,21 +302,18 @@ func TestEmptyCORSDisablesCrossOriginAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, test := range []struct {
-		origin  string
-		allowed bool
-	}{
-		{"http://localhost", false}, {"https://localhost:3000", false}, {"http://127.0.0.1:8080", false},
-		{"http://localhost.evil.test:3000", false}, {"http://127.0.0.2:3000", false}, {"http://[::1]:3000", false},
-		{"https://example.test", false}, {"null", false}, {"http://localhost:0", false}, {"http://localhost:65536", false},
+	for _, origin := range []string{
+		"http://localhost", "https://localhost:3000", "http://127.0.0.1:8080",
+		"http://localhost.evil.test:3000", "http://127.0.0.2:3000", "http://[::1]:3000",
+		"https://example.test", "null", "http://localhost:0", "http://localhost:65536",
 	} {
 		request := httptest.NewRequest(http.MethodOptions, "/api/v1/clients", nil)
-		request.Header.Set("Origin", test.origin)
+		request.Header.Set("Origin", origin)
 		request.Header.Set("Access-Control-Request-Method", http.MethodGet)
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
-		if (response.Code == http.StatusNoContent) != test.allowed {
-			t.Fatalf("origin=%s status=%d body=%s", test.origin, response.Code, response.Body)
+		if response.Code != http.StatusBadRequest || response.Header().Get("Access-Control-Allow-Origin") != "" {
+			t.Fatalf("origin=%s status=%d headers=%v body=%s", origin, response.Code, response.Header(), response.Body)
 		}
 	}
 }
