@@ -36,7 +36,7 @@ Default paths (`<root>` is the native extraction directory):
 | Runtime sockets | `/run/openvpn-container` | `<root>/run` | `OVPN_RUNTIME_DIR` |
 | SQLite authority | `/etc/openvpn/meta/state.db` | `<root>/data/meta/state.db` | derived from data dir |
 
-`OVPN_MAINTENANCE=true` authorizes offline migration. The batch address editor is selected from `--editor/-e`, `OVPN_EDITOR`, `EDITOR`, then `nano`. The Docker image includes `nano`, `vim`, and `vi`; the native archive includes `nano` and BusyBox `vi`. Any additional editor must be available in the deployment environment. Binary/template overrides are test and development interfaces, not normal deployment configuration.
+`OVPN_MAINTENANCE=true` authorizes offline migration. The configuration and batch address editor is selected from `--editor/-e`, `OVPN_EDITOR`, `EDITOR`, then `nano`. The Docker image includes `nano`, `vim`, and `vi`; the native archive includes `nano` and BusyBox `vi`. Any additional editor must be available in the deployment environment. Binary/template overrides are test and development interfaces, not normal deployment configuration.
 
 `ovpn client`, `ovpn state`, and `ovpn runtime` are safe shortcuts for `client list`, `state doctor`, and `runtime status`, including their options. For example, `ovpn client -d -j` is equivalent to `ovpn client list -d -j`. At the top level, `-v` prints only the project version while `-V` and `--version` print the full version report. In Docker, running `docker exec openvpn ovpn` without arguments prints the fully expanded command tree. The native `ovpn` launcher without arguments starts the server and initializes empty data from an existing configuration; missing configuration is refused. Use `ovpn -h` for root help in either deployment.
 
@@ -56,6 +56,10 @@ A new empty Docker instance can generate its first YAML file from Compose enviro
 | `OVPN_BOOTSTRAP_NAT_ENABLED` | `ipv4.nat.enabled` | no |
 | `OVPN_BOOTSTRAP_NAT_INTERFACE` | `ipv4.nat.interface` | no |
 | `OVPN_BOOTSTRAP_REDIRECT_GATEWAY` | `ipv4.redirectGateway` | no |
+| `OVPN_BOOTSTRAP_API_ENABLED` | `api.enabled` | no |
+| `OVPN_BOOTSTRAP_API_LISTEN_IP` | `api.listenIP` | no |
+| `OVPN_BOOTSTRAP_API_PORT` | `api.port` | no |
+| `OVPN_BOOTSTRAP_API_CORS` | `api.cors`, comma-separated origins | no |
 | `OVPN_BOOTSTRAP_DNS` | `ipv4.dns`, comma-separated | no |
 | `OVPN_BOOTSTRAP_ROUTES` | `ipv4.routes`, comma-separated | no |
 | `OVPN_BOOTSTRAP_LOG_MAX_BYTES` | `logging.maxBytes` | no |
@@ -93,8 +97,10 @@ Every public multi-letter option has a single-token short alias. Long and short 
 | `--json` | `-j` |
 | `--output` | `-o` |
 | `--yes` | `-y` |
-| `--force` | `-f` within `config apply` |
-| `--editor` | `-e` within `client address edit` |
+| `--force` | `-f` within `config apply` / `config edit --apply` |
+| `--plan` | `-p` (`config edit`) |
+| `--apply` | `-a` (`config edit`) |
+| `--editor` | `-e` within `config edit` / `client address edit` |
 | `--name` | `-n` |
 | `--id` | `-i` |
 | `--ipv4` | `-4` |
@@ -196,7 +202,7 @@ Syntax:
 ovpn server run
 ```
 
-Loads the applied SQLite snapshot, recovers interrupted operations, reconciles IPv4 forwarding/firewall state, and supervises OpenVPN plus the Go broker. When `OVPN_API_LISTEN` is non-empty it also supervises `ovpn-api`; configuration apply pauses only OpenVPN and the broker so the API remains available. TERM and INT stop all enabled children, while HUP is forwarded to OpenVPN.
+Loads the applied SQLite snapshot, recovers interrupted operations, reconciles IPv4 forwarding/firewall state, and supervises OpenVPN plus the Go broker. When applied `api.enabled` is true it also supervises `ovpn-api`; API setting changes take effect through configuration apply. TERM and INT stop all enabled children, while HUP is forwarded to OpenVPN.
 
 Missing or changed YAML causes a warning; runtime continues with the last applied database revision. Configuration is never applied at startup.
 
@@ -243,6 +249,16 @@ ovpn config export [--output|-o FILE|-]
 ```
 
 Writes a complete YAML v1 document from the applied SQLite snapshot. This is required after schema 3 migration if the instance did not already have v4 YAML. A file output is created with mode `0600` and is never overwritten; use stdout plus a temporary host file when replacing an existing YAML document.
+
+### `ovpn config edit`
+
+```bash
+ovpn config edit
+ovpn config edit --editor vi --plan
+ovpn config edit -e nano -a -y
+```
+
+Edits the configuration file only, without applying changes or modifying SQLite. Editor selection: `--editor/-e`, `OVPN_EDITOR`, `EDITOR`, then `nano`. Absolute executable paths may contain spaces; embedded editor arguments are unsupported. `--plan/-p` plans after editing; `--apply/-a` applies after editing; they are mutually exclusive. `--yes/-y` and `--force/-f` require apply; `--json/-j` requires plan or apply.
 
 ### `ovpn config plan`
 

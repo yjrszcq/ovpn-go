@@ -21,7 +21,7 @@ if docker run --rm --user 65534:65534 -e OVPN_CONFIG_FILE=/opt/ovpn/config/confi
   echo 'unprivileged initialization unexpectedly succeeded' >&2
   exit 1
 fi
-if docker run --rm --user 65534:65534 -v "$ROOT_DIR/scripts/install.sh:/install.sh:ro" --entrypoint /opt/ovpn/bin/bash "$image" /install.sh >"$work/install.log" 2>&1; then
+if docker run --rm --user 65534:65534 -v "$ROOT_DIR/install.sh:/install.sh:ro" --entrypoint /opt/ovpn/bin/bash "$image" /install.sh >"$work/install.log" 2>&1; then
   echo 'unprivileged installation unexpectedly succeeded' >&2
   exit 1
 fi

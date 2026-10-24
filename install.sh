@@ -5,6 +5,7 @@ umask 077
 language=en
 action=install
 interactive=1
+dry_run=0
 root=''
 version=latest
 base=''
@@ -29,6 +30,10 @@ fail() {
 }
 while [ "$#" -gt 0 ]; do
   case "$1" in
+  --dry-run)
+    dry_run=1
+    shift
+    ;;
   --non-interactive)
     interactive=0
     shift
@@ -47,7 +52,7 @@ while [ "$#" -gt 0 ]; do
   *) fail "unknown argument: $1" ;;
   esac
 done
-[ "$(id -u)" = 0 ] || fail 'installation requires root'
+[ "$dry_run" = 1 ] || [ "$(id -u)" = 0 ] || fail 'installation requires root'
 if [ "$interactive" = 1 ] && [ ! -t 0 ]; then fail 'an interactive terminal is required (automation must explicitly use --non-interactive)'; fi
 read_value() {
   local label="$1" default="$2"
@@ -55,7 +60,9 @@ read_value() {
   if [ -n "$default" ]; then printf ' [%s]' "$default"; fi
   printf ': '
   IFS= read -r REPLY || {
-    say 'Input interrupted; run the installer again to resume.' '输入中断；重新运行安装脚本即可继续。'
+    if [ "$dry_run" = 1 ]; then
+      say 'Preview interrupted; answers were discarded.' '试运行中断；答案不会保留。'
+    else say 'Input interrupted; run the installer again to resume.' '输入中断；重新运行安装脚本即可继续。'; fi
     exit 130
   }
   REPLY="${REPLY:-$default}"
@@ -91,8 +98,10 @@ if [ "$interactive" = 1 ]; then
   done
 fi
 case "$action" in install | update | uninstall) ;; *) fail 'invalid action' ;; esac
-for tool in tar sha256sum awk sed grep readlink seq find stat ln; do command -v "$tool" >/dev/null || fail "missing prerequisite: $tool"; done
-if [ "$action" != uninstall ]; then command -v curl >/dev/null || fail 'missing prerequisite: curl'; fi
+if [ "$dry_run" = 0 ]; then
+  for tool in tar sha256sum awk sed grep readlink seq find stat ln; do command -v "$tool" >/dev/null || fail "missing prerequisite: $tool"; done
+  if [ "$action" != uninstall ]; then command -v curl >/dev/null || fail 'missing prerequisite: curl'; fi
+fi
 record() {
   local key="$1" value="$2" temporary
   [ -n "$state" ] || return 0
@@ -109,7 +118,7 @@ saved() {
 finish_progress() {
   if [ -n "$state" ]; then rm -rf -- "$state"; fi
 }
-if [ "$interactive" = 1 ]; then
+if [ "$interactive" = 1 ] && [ "$dry_run" = 0 ]; then
   for directory in /var/lib/ovpn-go /var/lib/ovpn-go/installer "/var/lib/ovpn-go/installer/$action"; do
     [ ! -L "$directory" ] || fail 'unsafe setup progress directory'
     mkdir -p "$directory"
@@ -140,8 +149,10 @@ case "$root" in / | /opt | /usr | /usr/local | /usr/local/bin | *$'\n'* | *$'\r'
 root="${root%/}"
 [ ! -L "$root" ] || fail 'installation directory must not be a symlink'
 parent="$(dirname "$root")"
-mkdir -p "$parent"
-root="$(cd "$parent" && pwd -P)/$(basename "$root")"
+if [ "$dry_run" = 0 ]; then
+  mkdir -p "$parent"
+  root="$(cd "$parent" && pwd -P)/$(basename "$root")"
+fi
 record directory "$root"
 [ "$link" != "$root/ovpn" ] || fail 'command link must be outside the installation'
 if [ -e "$link" ] || [ -L "$link" ]; then
@@ -152,6 +163,8 @@ if command -v systemctl >/dev/null && [ -d /run/systemd/system ]; then
   manager=systemd
 elif command -v rc-service >/dev/null && [ -d /run/openrc ]; then
   manager=openrc
+elif [ "$dry_run" = 1 ]; then
+  manager=unavailable
 else fail 'no running systemd/OpenRC found; use manual foreground deployment'; fi
 journal="$root/.update-backup"
 lockfile="$root.install-lock"
@@ -292,6 +305,18 @@ render_config() {
       separator=', '
     done
   fi
+  printf ']\napi:\n  enabled: %s\n  listenIP: ' "$api_enabled"
+  quote_yaml "$api_listen_ip"
+  printf '\n  port: %s\n  cors: [' "$api_port"
+  separator=''
+  if [ "$api_cors" != none ]; then
+    IFS=, read -ra items <<<"$api_cors"
+    for item in "${items[@]}"; do
+      printf '%s' "$separator"
+      quote_yaml "$item"
+      separator=', '
+    done
+  fi
   printf ']\nlogging:\n  maxBytes: %s\n  backups: %s\n' "$log_bytes" "$log_backups"
 }
 config_answer() {
@@ -303,10 +328,10 @@ config_answer() {
   while true; do
     answer "$key" "$en" "$zh" "$default" "$kind"
     value="$REPLY"
-    case "$key" in port | log_bytes | log_backups) [[ "$value" =~ ^[0-9]+$ ]] || continue ;; pool) [[ "$value" = auto || "$value" =~ ^[0-9]+$ ]] || continue ;; esac
+    case "$key" in port | api_port | log_bytes | log_backups) [[ "$value" =~ ^[0-9]+$ ]] || continue ;; pool) [[ "$value" = auto || "$value" =~ ^[0-9]+$ ]] || continue ;; esac
     printf -v "$key" '%s' "$value"
     render_config >"$work/candidate.yaml"
-    if OVPN_CONFIG_FILE="$work/candidate.yaml" "$root/ovpn" config validate >"$work/validation" 2>&1; then
+    if [ "$dry_run" = 1 ] || OVPN_CONFIG_FILE="$work/candidate.yaml" "$root/ovpn" config validate >"$work/validation" 2>&1; then
       record "$key" "$value"
       return
     fi
@@ -322,8 +347,9 @@ setup() {
   new_service=0
   local endpoint=vpn.example.com protocol=udp family=auto port=1194 client_to_client=true
   local network=10.42.0.0/24 pool=auto nat=false interface=auto redirect=false dns=none routes=none log_bytes=10485760 log_backups=5
+  local api_enabled=false api_listen_ip=127.0.0.1 api_port=11940 api_cors=none
   local advanced start_now enable_boot
-  if [ ! -e "$root/config/config.yaml" ] || saved confirmed; then
+  if [ ! -e "$root/config/config.yaml" ]; then
     config_answer endpoint 'Public hostname or IP (required)' '公网域名或 IP（必填）' '' required
     config_answer network 'VPN IPv4 network' 'VPN IPv4 网段' 10.42.0.0/24
     config_answer protocol 'Transport protocol (udp/tcp)' '传输协议（udp/tcp）' udp
@@ -331,6 +357,12 @@ setup() {
     config_answer nat 'Enable NAT (yes/no)' '启用 NAT（yes/no）' false bool
     config_answer redirect 'Route client Internet traffic through VPN (yes/no)' '客户端互联网流量经过 VPN（yes/no）' false bool
     config_answer dns 'DNS servers (comma-separated IPv4, or none)' 'DNS 服务器（IPv4，逗号分隔，或 none）' none
+    config_answer api_enabled 'Enable REST API (yes/no)' '启用 REST API（yes/no）' false bool
+    if [ "$api_enabled" = true ]; then
+      config_answer api_listen_ip 'API listen IP' 'API 监听 IP' 127.0.0.1
+      config_answer api_port 'API port' 'API 端口' 11940
+      config_answer api_cors 'CORS hosts (comma-separated host[:port]; * allows all; none disables)' 'CORS 来源（host[:port]，逗号分隔；* 允许全部；none 关闭）' none
+    fi
     answer advanced 'Advanced settings (yes/no)' '高级设置（yes/no）' false bool
     advanced="$REPLY"
     record advanced "$advanced"
@@ -344,15 +376,19 @@ setup() {
       config_answer log_backups 'Log backup count' '日志备份数量' 5
     fi
     render_config >"$work/candidate.yaml"
-    OVPN_CONFIG_FILE="$work/candidate.yaml" "$root/ovpn" config validate
+    if [ "$dry_run" = 0 ]; then OVPN_CONFIG_FILE="$work/candidate.yaml" "$root/ovpn" config validate; fi
     cat "$work/candidate.yaml"
     answer confirmed 'Write this configuration (yes/no)' '写入以上配置（yes/no）' true bool
     [ "$REPLY" = true ] || {
-      say 'Configuration saved as a draft; rerun to continue.' '配置草稿已保存；重新运行即可继续。'
+      if [ "$dry_run" = 1 ]; then
+        say 'Preview cancelled; answers were discarded.' '已取消试运行；答案不会保留。'
+      else say 'Configuration saved as a draft; rerun to continue.' '配置草稿已保存；重新运行即可继续。'; fi
       exit 0
     }
     record confirmed true
-    if [ -e "$root/config/config.yaml" ]; then
+    if [ "$dry_run" = 1 ]; then
+      say "DRY RUN: would write $root/config/config.yaml after package validation." "试运行：通过程序验证后将写入 $root/config/config.yaml。"
+    elif [ -e "$root/config/config.yaml" ]; then
       "$root/bin/cmp" -s "$work/candidate.yaml" "$root/config/config.yaml" || fail 'configuration changed outside the installer; refusing to overwrite it'
     else
       candidate="$(mktemp "$root/config/.config.XXXXXX")"
@@ -362,6 +398,7 @@ setup() {
       candidate=''
     fi
   else
+    if [ "$dry_run" = 0 ]; then OVPN_CONFIG_FILE="$root/config/config.yaml" "$root/ovpn" config validate; fi
     say 'Existing configuration is retained.' '保留已有配置。'
   fi
   answer enable_boot 'Enable service at boot (yes/no)' '开机自动启动（yes/no）' true bool
@@ -370,6 +407,10 @@ setup() {
   answer start_now 'Start service now (yes/no)' '现在启动服务（yes/no）' true bool
   start_now="$REPLY"
   record start_now "$start_now"
+  if [ "$dry_run" = 1 ]; then
+    say "DRY RUN: enable at boot=$enable_boot; start now=$start_now; no service changes." "试运行：开机启动=$enable_boot；立即启动=$start_now；不会修改服务。"
+    return
+  fi
   if [ "$enable_boot" = true ]; then
     if [ "$manager" = systemd ]; then systemctl enable ovpn.service; else rc-update add ovpn default; fi
   fi
@@ -435,6 +476,41 @@ uninstall() {
   say "Uninstalled ovpn. Retain data: $keep" "已卸载 ovpn。保留数据：$keep"
   finish_progress
 }
+# Preview is isolated from installer progress, downloads, locks and host mutations.
+if [ "$dry_run" = 1 ]; then
+  say "DRY RUN: action=$action; directory=$root; command=$link; service manager=$manager" "试运行：操作=$action；目录=$root；命令=$link；服务管理器=$manager"
+  if [ "$action" != uninstall ]; then
+    if [ "$interactive" = 1 ]; then
+      answer version 'Release version (latest or X.Y.Z)' '发布版本（latest 或 X.Y.Z）' "$version" version
+      version="$REPLY"
+    fi
+    case "$(uname -m)" in x86_64) architecture=amd64 ;; aarch64 | arm64) architecture=arm64 ;; *) fail 'unsupported CPU architecture' ;; esac
+    say "DRY RUN: would resolve $version and verify the linux-$architecture archive and SHA256SUMS from ${base:-GitHub Releases}; no downloads." "试运行：将解析 $version 并校验 linux-$architecture 压缩包及 SHA256SUMS，来源 ${base:-GitHub Releases}；不会下载。"
+    if [ "$action" = install ]; then
+      setup
+    else
+      if [ "$interactive" = 1 ]; then
+        answer update_confirmed 'Continue update (yes/no)' '继续更新（yes/no）' true bool
+        [ "$REPLY" = true ] || exit 0
+      fi
+      say 'DRY RUN: would lock, snapshot, update and health-check; rollback on failure; preserve data and service state.' '试运行：将锁定、快照、更新和检查健康；失败回滚，保留数据和服务状态。'
+    fi
+  else
+    if [ "$interactive" = 1 ]; then
+      answer keep_data 'Keep configuration, certificates, database and logs (yes/no)' '保留配置、证书、数据库和日志（yes/no）' true bool
+      keep="$REPLY"
+      if [ "$keep" = false ]; then
+        answer delete_data 'Type DELETE to permanently delete instance data' '输入 DELETE 永久删除实例数据' '' required
+        [ "$REPLY" = DELETE ] || fail 'data deletion not confirmed'
+      fi
+      answer uninstall_confirmed 'Uninstall ovpn (yes/no)' '确认卸载 ovpn（yes/no）' false bool
+      [ "$REPLY" = true ] || exit 0
+      say "DRY RUN: would uninstall; keep data=$keep; no files or services changed." "试运行：将卸载；保留数据=$keep；不会修改文件或服务。"
+    else say 'DRY RUN: uninstall requires interactive confirmation during a real run; data is retained by default.' '试运行：实际卸载需要交互确认；默认保留数据。'; fi
+  fi
+  say 'DRY RUN complete. Package verification and runtime health have not been tested.' '试运行完成。尚未执行压缩包验证和运行健康检查。'
+  exit 0
+fi
 if [ "$action" = uninstall ]; then
   uninstall
   exit 0

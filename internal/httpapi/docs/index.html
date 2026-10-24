@@ -35,10 +35,12 @@
         <p><span id="intro-before">Each operation lists its complete request, responses, and error statuses. All requests except</span> <code>/healthz</code> <span id="intro-after">require a Bearer API key.</span></p>
         <div class="parameter-table-wrap configuration-table-wrap">
           <table id="configuration-table" class="parameter-table configuration-table">
-            <thead><tr><th>Variable</th><th>Default</th><th>Accepted values</th><th>Description</th></tr></thead>
+            <thead><tr><th>YAML field</th><th>Default</th><th>Accepted values</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><code>OVPN_API_LISTEN</code></td><td id="listen-default">empty</td><td id="listen-values"><code>127.0.0.1:&lt;unused-port&gt;</code><br><code>0.0.0.0:&lt;unused-port&gt;</code></td><td id="listen-description">Uses any unused host port from 1 through 65535. Host networking needs no ports mapping. An empty value disables the API.</td></tr>
-              <tr><td><code>OVPN_API_CORS_ORIGINS</code></td><td id="cors-default">empty</td><td id="cors-values"><code>domain-or-IP[:port][,...]</code><br><code>*</code></td><td id="cors-description">Omit the scheme. Commas allow multiple values; for example, vpn-admin.example.com,192.0.2.10:3000. Use * alone for any HTTP(S) origin. An empty value disables CORS.</td></tr>
+              <tr><td><code>api.enabled</code></td><td>false</td><td>true / false</td><td id="enabled-description">Enable the REST API through configuration apply.</td></tr>
+              <tr><td><code>api.listenIP</code></td><td>127.0.0.1</td><td id="listen-values">IPv4 / IPv6</td><td id="listen-description">IP address to bind.</td></tr>
+              <tr><td><code>api.port</code></td><td>11940</td><td>1–65535</td><td id="port-description">Unused listening port.</td></tr>
+              <tr><td><code>api.cors</code></td><td id="cors-default">[]</td><td id="cors-values">[host[:port], ...] / ["*"] / []</td><td id="cors-description">YAML list of scheme-less origins; ["*"] allows any HTTP(S) origin; an empty list disables CORS.</td></tr>
             </tbody>
           </table>
         </div>

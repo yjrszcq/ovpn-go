@@ -6,49 +6,30 @@ The API is disabled by default. It uses HTTP internally and does not manage TLS 
 
 When enabled, the API serves development documentation directly:
 
-- `http://<OVPN_API_LISTEN>/docs/` is the frontend reference. Each of the 22 operations independently shows its complete HTTP request, parameters, body fields, success response, error responses, and JSON examples; developers do not have to assemble a call from grouped models. It follows the browser language by default (Chinese for Chinese browser locales and English otherwise), with a persistent manual switch in the top bar.
-- `http://<OVPN_API_LISTEN>/docs/openapi.json` is the OpenAPI 3.1 contract for Orval, OpenAPI Generator, NSwag, and API clients.
+- `http://<listenIP>:<port>/docs/` is the frontend reference. Each of the 22 operations independently shows its complete HTTP request, parameters, body fields, success response, error responses, and JSON examples; developers do not have to assemble a call from grouped models. It follows the browser language by default (Chinese for Chinese browser locales and English otherwise), with a persistent manual switch in the top bar.
+- `http://<listenIP>:<port>/docs/openapi.json` is the OpenAPI 3.1 contract for Orval, OpenAPI Generator, NSwag, and API clients.
 
 Documentation is public because it contains only the API contract. Actual `/api/v1/*` resources still require an API key.
 
 ## Enable the API
 
-For Docker, set a non-empty listen address on the live `openvpn` service:
+Configure the API in YAML with `ovpn config edit -a`; for Docker use `docker exec -it openvpn ovpn config edit -a`. The API defaults to disabled, with listen IP `127.0.0.1` and port `11940`.
 
 ```yaml
-services:
-  openvpn:
-    environment:
-      OVPN_API_LISTEN: 127.0.0.1:11940
-      OVPN_API_CORS_ORIGINS: vpn-admin.example.com
+api:
+  enabled: true
+  listenIP: 127.0.0.1
+  port: 11940
+  cors: []
 ```
 
-For native installations, configure the same variables in the service environment or pass them to the foreground process; see [native API setup](native-linux.md#api-and-offline-maintenance). Restart the native service after changing its environment.
+`api.listenIP` accepts an IPv4 or IPv6 address; `0.0.0.0` listens on all IPv4 interfaces. Choose an unused port from 1–65535; host networking needs no ports mapping. Apply changes through the CLI or REST configuration endpoint. Listener changes and disabling the API drain the current request first.
 
-`OVPN_API_LISTEN` uses `address:port` format. The port may be any unused host port from `1` through `65535`:
+`api.cors: []` disables CORS, including cross-origin requests from localhost. Same-origin browsers and non-browser clients need no CORS configuration. Allowed origins are a YAML list of scheme-less `host[:port]` values, for example `[vpn-admin.example.com, "192.0.2.10:3000"]`. `["*"]` allows any valid HTTP(S) origin and must be used alone. Hostnames are case-insensitive; ports match exactly. Paths and credentials are forbidden. CORS does not replace authentication or network access controls.
 
-| Example | Exposure |
-|---|---|
-| `127.0.0.1:11940` | Listens only on the host IPv4 loopback interface and is recommended with a local HTTPS reverse proxy. Replace `11940` with any other unused port. |
-| `0.0.0.0:11940` | Listens on every host IPv4 interface. Replace `11940` with any other unused port. LAN or Internet reachability also depends on the host firewall, cloud security groups, and routing. |
+Docker first-time initialization accepts `OVPN_BOOTSTRAP_API_ENABLED`, `OVPN_BOOTSTRAP_API_LISTEN_IP`, `OVPN_BOOTSTRAP_API_PORT` and `OVPN_BOOTSTRAP_API_CORS` (comma-separated origins). They generate YAML only for an empty instance with `OVPN_BOOTSTRAP_FROM_ENV=true`; later changes use YAML. Legacy `OVPN_API_LISTEN` and `OVPN_API_CORS_ORIGINS` are no longer read.
 
-The project Compose file uses `network_mode: host`, so this directly occupies a host port; a Compose `ports` mapping is neither required nor a way to resolve a conflict. An empty `OVPN_API_LISTEN` disables the API process. Do not include an `http://` or `https://` scheme, and do not add these variables to `openvpn-maintenance`.
-
-`OVPN_API_CORS_ORIGINS` is optional and allows cross-origin browser frontends to access the API. Values omit the `http://` or `https://` scheme and support these forms:
-
-| Value | Meaning |
-|---|---|
-| empty | Disables CORS. A same-origin frontend or non-browser client needs no CORS configuration. |
-| `vpn-admin.example.com` | Allows the domain with either an HTTP or HTTPS browser origin. |
-| `vpn-admin.example.com:3000` | Allows the domain on the specified port. |
-| `192.0.2.10` | Allows the IP address. |
-| `192.0.2.10:3000` | Allows the IP address on the specified port. |
-| `*` | Allows any valid HTTP or HTTPS origin. `*` must be used alone. |
-| `vpn-admin.example.com,192.0.2.10:3000` | Uses commas to separate multiple domains, IP addresses, or values with ports. |
-
-Host matching is case-insensitive and ports must match exactly. Do not include a scheme, path, query, credentials, or an empty list entry such as a trailing comma. `*` broadens browser access and should be enabled only when explicitly required.
-
-A minimal Caddy boundary is:
+Example HTTPS reverse proxy:
 
 ```caddyfile
 vpn-admin.example.com {
@@ -4108,6 +4089,11 @@ Response fields:
 | `config.ipv4.redirect_gateway` | `boolean` | yes | example: false | Whether generated profiles redirect the default IPv4 route through VPN. |
 | `config.ipv4.dns` | `string[]` | yes | example: [] | IPv4 DNS servers pushed to clients. |
 | `config.ipv4.routes` | `string[]` | yes | example: [] | Additional IPv4 CIDR routes pushed to clients. |
+| `config.api` | `object` | no | - | REST API settings; omitted for defaults. |
+| `config.api.enabled` | `boolean` | yes if api present | default: false | Enable the listener. |
+| `config.api.listen_ip` | `string` | yes if api present | default: 127.0.0.1 | IPv4 or IPv6 listen address. |
+| `config.api.port` | `integer` | yes if api present | 1–65535; default: 11940 | Listening port. |
+| `config.api.cors` | `string[]` | yes if api present | default: [] | Empty disables CORS; scheme-less origins or ["*"]. |
 | `config.logging` | `object` | yes | - | Runtime log rotation settings. |
 | `config.logging.max_bytes` | `integer` | yes | minimum: 1; example: 10485760 | Maximum active log file size before rotation. |
 | `config.logging.backups` | `integer` | yes | minimum: 0; example: 5 | Number of rotated log files retained. |
@@ -4326,6 +4312,11 @@ Response fields:
 | `config.ipv4.redirect_gateway` | `boolean` | yes | example: false | Whether generated profiles redirect the default IPv4 route through VPN. |
 | `config.ipv4.dns` | `string[]` | yes | example: [] | IPv4 DNS servers pushed to clients. |
 | `config.ipv4.routes` | `string[]` | yes | example: [] | Additional IPv4 CIDR routes pushed to clients. |
+| `config.api` | `object` | no | - | REST API settings; omitted for defaults. |
+| `config.api.enabled` | `boolean` | yes if api present | default: false | Enable the listener. |
+| `config.api.listen_ip` | `string` | yes if api present | default: 127.0.0.1 | IPv4 or IPv6 listen address. |
+| `config.api.port` | `integer` | yes if api present | 1–65535; default: 11940 | Listening port. |
+| `config.api.cors` | `string[]` | yes if api present | default: [] | Empty disables CORS; scheme-less origins or ["*"]. |
 | `config.logging` | `object` | yes | - | Runtime log rotation settings. |
 | `config.logging.max_bytes` | `integer` | yes | minimum: 1; example: 10485760 | Maximum active log file size before rotation. |
 | `config.logging.backups` | `integer` | yes | minimum: 0; example: 5 | Number of rotated log files retained. |
@@ -4525,6 +4516,11 @@ Replace desired configuration with CAS. Send the previous desired digest as a qu
 | `ipv4.redirect_gateway` | `body` | `boolean` | yes | example: false | Whether generated profiles redirect the default IPv4 route through VPN. |
 | `ipv4.dns` | `body` | `string[]` | yes | example: ["1.1.1.1"] | IPv4 DNS servers pushed to clients. |
 | `ipv4.routes` | `body` | `string[]` | yes | example: ["10.20.0.0/16"] | Additional IPv4 CIDR routes pushed to clients. |
+| `api` | `body` | `object` | no | - | REST API settings; omitted for defaults. |
+| `api.enabled` | `body` | `boolean` | yes if api present | default: false | Enable the listener. |
+| `api.listen_ip` | `body` | `string` | yes if api present | default: 127.0.0.1 | IPv4 or IPv6 listen address. |
+| `api.port` | `body` | `integer` | yes if api present | 1–65535; default: 11940 | Listening port. |
+| `api.cors` | `body` | `string[]` | yes if api present | default: [] | Empty disables CORS; scheme-less origins or ["*"]. |
 | `logging` | `body` | `object` | yes | - | Runtime log rotation settings. |
 | `logging.max_bytes` | `body` | `integer` | yes | minimum: 1; example: 10485760 | Maximum active log file size before rotation. |
 | `logging.backups` | `body` | `integer` | yes | minimum: 0; example: 5 | Number of rotated log files retained. |
@@ -4626,6 +4622,11 @@ Response fields:
 | `config.ipv4.redirect_gateway` | `boolean` | yes | example: false | Whether generated profiles redirect the default IPv4 route through VPN. |
 | `config.ipv4.dns` | `string[]` | yes | example: [] | IPv4 DNS servers pushed to clients. |
 | `config.ipv4.routes` | `string[]` | yes | example: [] | Additional IPv4 CIDR routes pushed to clients. |
+| `config.api` | `object` | no | - | REST API settings; omitted for defaults. |
+| `config.api.enabled` | `boolean` | yes if api present | default: false | Enable the listener. |
+| `config.api.listen_ip` | `string` | yes if api present | default: 127.0.0.1 | IPv4 or IPv6 listen address. |
+| `config.api.port` | `integer` | yes if api present | 1–65535; default: 11940 | Listening port. |
+| `config.api.cors` | `string[]` | yes if api present | default: [] | Empty disables CORS; scheme-less origins or ["*"]. |
 | `config.logging` | `object` | yes | - | Runtime log rotation settings. |
 | `config.logging.max_bytes` | `integer` | yes | minimum: 1; example: 10485760 | Maximum active log file size before rotation. |
 | `config.logging.backups` | `integer` | yes | minimum: 0; example: 5 | Number of rotated log files retained. |
@@ -5523,7 +5524,7 @@ Use `request_id` to correlate a failed call without recording its Authorization 
 
 ## Security boundary
 
-- Keep `OVPN_API_LISTEN` empty when remote management is not required.
+- Keep `api.enabled: false` when remote management is not required.
 - Bind to loopback or a private management network and terminate TLS at a trusted reverse proxy.
 - Restrict reverse-proxy and host firewall access independently of API authentication.
 - Use a distinct API key per integration and delete unused keys promptly.

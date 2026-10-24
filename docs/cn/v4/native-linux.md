@@ -11,7 +11,7 @@ x86-64 使用 `linux-amd64`，AArch64 使用 `linux-arm64`。宿主需要 Linux 
 请等待 Release 页面上的两个架构压缩包和 `SHA256SUMS` 齐全后再安装。引导脚本需要 Bash、curl、tar、`sha256sum` 及常见 Linux 命令行工具，不会安装宿主软件包。
 
 ```bash
-sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/install.sh')"
 ```
 
 安装器先询问语言（默认 English），再询问安装、更新或卸载（默认安装）。安装目录默认 `/opt/ovpn`，版本默认最新稳定 Release；其他有默认值的选项直接回车即可。公网域名或 IP 必须填写。后续交互包括 VPN 网段、传输协议、端口、NAT、DNS 和可选高级配置。
@@ -25,7 +25,7 @@ sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/ma
 交互安装已完成配置和启动选择。以下命令用于后续手动编辑、启动，或选择暂不启动后的操作。
 
 ```bash
-sudo /opt/ovpn/bin/nano /opt/ovpn/config/config.yaml
+sudo ovpn config edit
 ```
 
 将 `server.endpoint` 改为公网域名或 IP，并选择不与现有网络重叠的 `ipv4.network`。启动前检查传输方式、NAT、路由和 DNS 设置。也可使用包内编辑器 `/opt/ovpn/bin/nano`。
@@ -76,22 +76,19 @@ CLI、可选 REST API 和已有 `OVPN_*` 覆盖继续有效。覆盖按进程生
 
 ## API 与离线维护
 
-API 默认关闭。前台使用时，先停止托管实例，再指定 loopback 监听地址启动：
+API 默认关闭。安装向导可以配置 API；之后运行 `sudo ovpn config edit -a`，修改以下 YAML 并确认应用：
 
-```bash
-sudo env OVPN_API_LISTEN=127.0.0.1:11940 /opt/ovpn/ovpn
+```yaml
+api:
+  enabled: true
+  listenIP: 127.0.0.1
+  port: 11940
+  cors: []
 ```
 
-systemd 服务执行 `sudo env SYSTEMD_EDITOR=/opt/ovpn/bin/nano systemctl edit ovpn` 并添加：
+空 `cors` 列表关闭 CORS。远程访问请使用 HTTPS 反向代理；参见 [REST API 指南](rest-api.md)。
 
-```ini
-[Service]
-Environment="OVPN_API_LISTEN=127.0.0.1:11940"
-```
-
-然后执行 `sudo systemctl daemon-reload` 和 `sudo systemctl restart ovpn`。OpenRC 在 `/etc/conf.d/ovpn` 中设置 `export OVPN_API_LISTEN=127.0.0.1:11940`，再执行 `sudo rc-service ovpn restart`。浏览器前端需要 CORS 时，在同一服务环境中设置 `OVPN_API_CORS_ORIGINS`。这些设置属于进程环境，不写入 YAML；远程访问应使用 HTTPS 反向代理。
-
-针对该安装创建 API key：
+为此实例创建 API key：
 
 ```bash
 sudo /opt/ovpn/ovpn api key create frontend-production --output /root/frontend.key
@@ -108,7 +105,7 @@ sudo env OVPN_MAINTENANCE=true /opt/ovpn/ovpn migrate plan
 ## 更新与恢复
 
 ```bash
-sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/install.sh')"
 ```
 
 重新运行脚本并选择“更新”。更新器先下载验证，再锁定安装目录。服务原先运行时，会停止、保存快照、更新并重启检查健康；原先停止则继续停止。用户配置、证书、数据库、客户端配置、日志、权限和开机启动状态会保留。替换或健康检查失败时恢复旧程序和快照。更新中断后，再次执行更新器即可恢复事务；若 `.update-backup/` 仍保留，表示恢复需要处理，请在实例恢复健康前保留它。
@@ -167,3 +164,7 @@ sudo ./ovpn
 手工前台运行不需要服务管理器。需要通过 PATH 使用 CLI 时，添加解压根目录，例如 `export PATH="/opt/ovpn:$PATH"`，并保持整个目录完整。支持绝对路径、符号链接、不同工作目录和含空格的路径。`sudo` 可能重置 PATH，此时请使用程序绝对路径或安装器创建的 `/usr/local/bin/ovpn` 链接。
 
 初始化前可直接移动目录。已初始化的实例需要先停止，再移动完整目录，然后执行 `sudo /new/path/ovpn repair apply --yes`，重建含绝对路径的派生文件后再启动。仍指向旧位置的服务定义和命令链接也需要更新。安装器管理的更新操作使用原先注册的目录和服务；手工移动后需要先同步调整这些路径。
+
+### 安装试运行
+
+在仓库目录运行 `bash install.sh --dry-run`，无需 sudo。保留语言、操作和配置交互，展示草稿及将执行的操作，不下载、不写入安装目录、配置或续填记录，也不操作服务。试运行不验证发布附件或运行健康；退出后不会保存答案。更新、卸载预览同样从操作菜单选择。

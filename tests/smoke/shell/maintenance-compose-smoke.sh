@@ -46,16 +46,24 @@ bootstrap_variables=(
   OVPN_BOOTSTRAP_ROUTES
   OVPN_BOOTSTRAP_LOG_MAX_BYTES
   OVPN_BOOTSTRAP_LOG_BACKUPS
+  OVPN_BOOTSTRAP_API_ENABLED
+  OVPN_BOOTSTRAP_API_LISTEN_IP
+  OVPN_BOOTSTRAP_API_PORT
+  OVPN_BOOTSTRAP_API_CORS
 )
 for variable in "${bootstrap_variables[@]}"; do
   printf '%s\n' "$openvpn_service" | grep -Fq "$variable:"
   grep -Eq "^${variable}=" "$ROOT_DIR/.env.example"
 done
 for variable in OVPN_API_LISTEN OVPN_API_CORS_ORIGINS; do
-  printf '%s\n' "$openvpn_service" | grep -Fq "$variable:"
-  grep -Eq "^${variable}=" "$ROOT_DIR/.env.example"
+  if printf '%s\n' "$openvpn_service" | grep -Fq "$variable:"; then
+    echo "legacy API environment must not be exposed: $variable" >&2
+    exit 1
+  fi
+done
+for variable in OVPN_BOOTSTRAP_API_ENABLED OVPN_BOOTSTRAP_API_LISTEN_IP OVPN_BOOTSTRAP_API_PORT OVPN_BOOTSTRAP_API_CORS; do
   if printf '%s\n' "$maintenance_service" | grep -Fq "$variable:"; then
-    echo "maintenance service must not expose API variable $variable" >&2
+    echo "maintenance service must not bootstrap API settings" >&2
     exit 1
   fi
 done

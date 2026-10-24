@@ -53,11 +53,12 @@ jobs:
       - name: Lint workflows and delivery tooling
         run: |
           python3 tests/smoke/bundle/release-assets-test.py
+          python3 tests/smoke/bundle/installer-dry-run.py
           docker run --rm -v "$PWD:/work:ro" -w /work rhysd/actionlint:1.7.7
           docker run --rm -v "$PWD:/work:ro" -w /work koalaman/shellcheck:v0.10.0 -e SC1091,SC2016 \
             scripts/docker-build.sh \
             scripts/build-bundle.sh \
-            scripts/install.sh \
+            install.sh \
             tests/smoke/bundle/*.sh \
             scripts/fetch-openvpn-source.sh \
             scripts/go-tool.sh \
@@ -88,7 +89,7 @@ jobs:
           docker run --rm -v "$PWD:/work:ro" -w /work mvdan/shfmt:v3.10.0 -i 2 -d \
             scripts/docker-build.sh \
             scripts/build-bundle.sh \
-            scripts/install.sh \
+            install.sh \
             tests/smoke/bundle/*.sh \
             scripts/fetch-openvpn-source.sh \
             scripts/go-tool.sh \
@@ -156,6 +157,7 @@ jobs:
           OVPN_RUNTIME_SKIP_BUILD=1 OVPN_RUNTIME_REQUIRED=1 OVPN_RUNTIME_IMAGE="$IMAGE" tests/smoke/container/runtime-image-smoke.sh
           OVPN_CLI_UX_SKIP_BUILD=1 OVPN_CLI_UX_REQUIRED=1 OVPN_CLI_UX_IMAGE="$IMAGE" tests/smoke/container/cli-ux-container-smoke.sh
           OVPN_API_SKIP_BUILD=1 OVPN_API_REQUIRED=1 OVPN_API_IMAGE="$IMAGE" tests/smoke/container/api-container-smoke.sh
+          python3 tests/smoke/container/config-api-container-smoke.py "$IMAGE"
       - name: Verify schema 4 backup and restore
         run: OVPN_BACKUP_SKIP_BUILD=1 OVPN_BACKUP_REQUIRED=1 OVPN_BACKUP_IMAGE="$IMAGE" tests/smoke/container/backup-restore-container-smoke.sh
       - name: Verify client lifecycle and UDP/TCP tunnels

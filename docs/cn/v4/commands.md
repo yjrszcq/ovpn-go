@@ -36,7 +36,7 @@ maintenance 服务的 entrypoint 已经是 `ovpn`，因此 `<command>` 直接从
 | runtime socket | `/run/openvpn-container` | `<root>/run` | `OVPN_RUNTIME_DIR` |
 | SQLite 权威库 | `/etc/openvpn/meta/state.db` | `<root>/data/meta/state.db` | 由 data dir 派生 |
 
-`OVPN_MAINTENANCE=true` 授权离线迁移。批量地址编辑器依次取 `--editor/-e`、`OVPN_EDITOR`、`EDITOR`，最后使用 `nano`。Docker 镜像内置 `nano`、`vim` 和 `vi`，裸机压缩包提供 `nano` 和 BusyBox `vi`；其他编辑器必须在相应部署环境中可用。外部二进制与模板覆盖变量只用于测试和开发，不属于常规部署配置。
+`OVPN_MAINTENANCE=true` 授权离线迁移。配置和批量地址编辑器依次取 `--editor/-e`、`OVPN_EDITOR`、`EDITOR`，最后使用 `nano`。Docker 镜像内置 `nano`、`vim` 和 `vi`，裸机压缩包提供 `nano` 和 BusyBox `vi`；其他编辑器必须在相应部署环境中可用。外部二进制与模板覆盖变量只用于测试和开发，不属于常规部署配置。
 
 `ovpn client`、`ovpn state`、`ovpn runtime` 是 `client list`、`state doctor`、`runtime status` 的安全快捷方式，并继承对应子命令的参数。例如 `ovpn client -d -j` 等同于 `ovpn client list -d -j`。顶层 `-v` 只输出项目版本，`-V` 与 `--version` 输出完整版本报告。Docker 内执行无参数的 `docker exec openvpn ovpn` 会显示完整展开命令树；裸机 `ovpn` 启动器无参数执行会启动服务，并使用已有配置初始化空数据，缺少配置时拒绝启动。两种部署均可使用 `ovpn -h` 查看根帮助。
 
@@ -56,6 +56,10 @@ maintenance 服务的 entrypoint 已经是 `ovpn`，因此 `<command>` 直接从
 | `OVPN_BOOTSTRAP_NAT_ENABLED` | `ipv4.nat.enabled` | 否 |
 | `OVPN_BOOTSTRAP_NAT_INTERFACE` | `ipv4.nat.interface` | 否 |
 | `OVPN_BOOTSTRAP_REDIRECT_GATEWAY` | `ipv4.redirectGateway` | 否 |
+| `OVPN_BOOTSTRAP_API_ENABLED` | `api.enabled` | 否 |
+| `OVPN_BOOTSTRAP_API_LISTEN_IP` | `api.listenIP` | 否 |
+| `OVPN_BOOTSTRAP_API_PORT` | `api.port` | 否 |
+| `OVPN_BOOTSTRAP_API_CORS` | `api.cors`，逗号分隔来源 | 否 |
 | `OVPN_BOOTSTRAP_DNS` | `ipv4.dns`，逗号分隔 | 否 |
 | `OVPN_BOOTSTRAP_ROUTES` | `ipv4.routes`，逗号分隔 | 否 |
 | `OVPN_BOOTSTRAP_LOG_MAX_BYTES` | `logging.maxBytes` | 否 |
@@ -94,6 +98,8 @@ mutation 会先执行只读验证、目标选择和 plan，再请求确认。无
 | `--output` | `-o` |
 | `--yes` | `-y` |
 | `--force` | `config apply` 中使用 `-f` |
+| `--plan` | `-p` (`config edit`) |
+| `--apply` | `-a` (`config edit`) |
 | `--editor` | `client address edit` 中使用 `-e` |
 | `--name` | `-n` |
 | `--id` | `-i` |
@@ -196,7 +202,7 @@ Docker entrypoint 和裸机版无参数启动只初始化空数据目录；裸�
 ovpn server run
 ```
 
-加载 applied SQLite 快照，恢复中断 operation，reconcile IPv4 forwarding/防火墙，并监督 OpenVPN 与 Go broker。`OVPN_API_LISTEN` 非空时还会监督 `ovpn-api`；配置 apply 只暂停 OpenVPN 和 broker，API 保持可用。TERM/INT 停止所有已启用子进程，HUP 只转发给 OpenVPN。
+加载 applied SQLite 快照，恢复中断 operation，reconcile IPv4 forwarding/防火墙，并监督 OpenVPN 与 Go broker。applied 配置中 `api.enabled` 为 true 时还会监督 `ovpn-api`；API 设置通过配置 apply 生效。TERM/INT 停止所有已启用子进程，HUP 只转发给 OpenVPN。
 
 YAML 缺失或发生漂移只会产生警告；runtime 继续使用最近 applied revision，启动时绝不会自动 apply。
 
@@ -243,6 +249,16 @@ ovpn config export [--output|-o FILE|-]
 ```
 
 从 applied SQLite 快照输出完整 YAML v1。schema 3 迁移实例若没有 v4 YAML，迁移后必须执行该命令。文件输出以 `0600` 新建且绝不覆盖已有文件；替换现有 YAML 时应输出到 stdout，经宿主临时文件再改名。
+
+### `ovpn config edit`
+
+```bash
+ovpn config edit
+ovpn config edit --editor vi --plan
+ovpn config edit -e nano -a -y
+```
+
+默认只编辑配置文件，不应用、不修改 SQLite。编辑器依次取 `--editor/-e`、`OVPN_EDITOR`、`EDITOR`、`nano`；可指定含空格的绝对路径，但不能附带编辑器参数。`--plan/-p` 编辑后生成计划；`--apply/-a` 编辑后应用，二者互斥。`--yes/-y`、`--force/-f` 仅用于 apply；`--json/-j` 仅用于 plan/apply。
 
 ### `ovpn config plan`
 

@@ -11,10 +11,10 @@ Compatibility covers Debian 13.7, Ubuntu 26.10, Rocky Linux 10.2, Alpine 3.24.3 
 Wait until the Release page contains both architecture archives and `SHA256SUMS`. The bootstrap requires Bash, curl, tar, a `sha256sum` tool and standard Linux command-line utilities. It does not install host packages.
 
 ```bash
-sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/install.sh')"
 ```
 
-The installer first asks for a language (English by default), then Install, Update or Uninstall (Install by default). The default directory is `/opt/ovpn` and the default version is the latest stable Release. Press Enter to accept displayed defaults. Your public hostname/IP is required. Further prompts cover the VPN network, transport, port, NAT, DNS and optional advanced settings.
+The installer first asks for a language (English by default), then Install, Update or Uninstall (Install by default). The default directory is `/opt/ovpn` and the default version is the latest stable Release. Press Enter to accept displayed defaults. Your public hostname/IP is required. Further prompts cover the VPN network, transport, port, NAT, DNS, REST API settings and optional advanced settings.
 
 It detects the host architecture, verifies the archive, creates `/usr/local/bin/ovpn` and registers a systemd or OpenRC service. Configuration is validated and written once after confirmation. It then asks whether to enable boot startup and start now (both default to yes). Unrelated existing commands, directories and service definitions are refused. One managed service is supported per host.
 
@@ -25,7 +25,7 @@ Ctrl-C interrupts setup. Rerun and select the same action to retain completed an
 Interactive installation already handles configuration and startup choices. Use these commands for later manual edits, startup, or after choosing not to start during installation.
 
 ```bash
-sudo /opt/ovpn/bin/nano /opt/ovpn/config/config.yaml
+sudo ovpn config edit
 ```
 
 Set `server.endpoint` to your public hostname/IP and choose a non-overlapping `ipv4.network`. Review transport, NAT, routes and DNS settings before starting. The bundled editor is also available as `/opt/ovpn/bin/nano`.
@@ -76,22 +76,19 @@ The CLI and optional REST API retain their existing interfaces and `OVPN_*` over
 
 ## API and offline maintenance
 
-The API is disabled by default. For foreground use, first stop any managed instance, then start with an explicit loopback listener:
+The API is disabled by default. Configure it in the installer or run `sudo ovpn config edit -a`, edit the following YAML and confirm application:
 
-```bash
-sudo env OVPN_API_LISTEN=127.0.0.1:11940 /opt/ovpn/ovpn
+```yaml
+api:
+  enabled: true
+  listenIP: 127.0.0.1
+  port: 11940
+  cors: []
 ```
 
-For a systemd service, use `sudo env SYSTEMD_EDITOR=/opt/ovpn/bin/nano systemctl edit ovpn` and add:
+An empty `cors` list disables CORS. Use an HTTPS reverse proxy for remote access; see the [REST API guide](rest-api.md).
 
-```ini
-[Service]
-Environment="OVPN_API_LISTEN=127.0.0.1:11940"
-```
-
-Then run `sudo systemctl daemon-reload` and `sudo systemctl restart ovpn`. For OpenRC, place `export OVPN_API_LISTEN=127.0.0.1:11940` in `/etc/conf.d/ovpn` and restart with `sudo rc-service ovpn restart`. Set `OVPN_API_CORS_ORIGINS` in the same service environment when a browser frontend requires CORS. These settings belong to the process environment, not YAML. Use an HTTPS reverse proxy for remote access.
-
-Create an API key against this installation:
+Create an API key for this installation:
 
 ```bash
 sudo /opt/ovpn/ovpn api key create frontend-production --output /root/frontend.key
@@ -108,7 +105,7 @@ sudo env OVPN_MAINTENANCE=true /opt/ovpn/ovpn migrate plan
 ## Update and recover
 
 ```bash
-sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/install.sh')"
 ```
 
 Rerun the script and select Update. The updater downloads and verifies first, then locks the installation. A running service is stopped, snapshotted, updated and restarted with a health check; a stopped service stays stopped. Your configuration, certificates, database, profiles, logs, permissions and service enablement are retained. A failed replacement or health check restores the previous program and snapshot. After an interrupted update, rerun the updater to recover the transaction. A retained `.update-backup/` means recovery needs attention; preserve it until the instance is healthy.
@@ -167,3 +164,7 @@ sudo ./ovpn
 No service manager is required for manual foreground operation. To use the CLI through PATH, add the extraction root, for example `export PATH="/opt/ovpn:$PATH"`; keep the whole directory together. Absolute paths, symlinks, different working directories and paths containing spaces are supported. `sudo` may reset PATH; use the absolute executable path or the installer-created `/usr/local/bin/ovpn` link in that case.
 
 Before initialization, move the directory freely. For an initialized instance, stop it, move the complete directory, then run `sudo /new/path/ovpn repair apply --yes` to regenerate derived absolute paths before restarting. Update any service definition and command symlink that still points to the old location. The installer-managed updater targets the directory and service originally registered; manual relocations require adjusting those paths first.
+
+### Preview installation
+
+From the repository, run `bash install.sh --dry-run` without sudo. It retains language, action and configuration prompts and shows the draft and intended operations, without downloading, writing installation/configuration/resume state or changing services. It does not verify Release assets or runtime health, and answers are discarded on exit. Select Update or Uninstall in the same preview menu.

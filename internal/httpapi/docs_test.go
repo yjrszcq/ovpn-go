@@ -124,7 +124,7 @@ func TestDocumentationSupportsCompleteChineseAndEnglishRendering(t *testing.T) {
 		t.Fatal(err)
 	}
 	translationSource := string(translationBytes)
-	for _, expected := range []string{`title: "API 接口文档"`, `title: "API Reference"`, `tableHeaders: ["字段"`, `tableHeaders: ["Field"`, `configurationHeaders: ["变量", "默认值", "可填写值", "说明"]`, `configurationHeaders: ["Variable", "Default", "Accepted values", "Description"]`, `apiKeyHeaders: ["命令", "说明"]`, `apiKeyHeaders: ["Command", "Description"]`, `命令格式约定为`, `When running commands from the host`, `完整 secret 只会显示一次`, `prints its complete secret once`, `127.0.0.1:<空闲端口>`, `0.0.0.0:<unused-port>`, `vpn-admin.example.com,192.0.2.10:3000`, `单独填写 *`, `Use * alone`} {
+	for _, expected := range []string{`title: "API 接口文档"`, `title: "API Reference"`, `tableHeaders: ["字段"`, `tableHeaders: ["Field"`, `configurationHeaders: ["YAML 字段", "默认值", "可填写值", "说明"]`, `configurationHeaders: ["YAML field", "Default", "Accepted values", "Description"]`, `apiKeyHeaders: ["命令", "说明"]`, `apiKeyHeaders: ["Command", "Description"]`, `命令格式约定为`, `When running commands from the host`, `完整 secret 只会显示一次`, `prints its complete secret once`, `IPv4 / IPv6`, `空列表关闭 CORS`, `an empty list disables CORS`} {
 		if !strings.Contains(translationSource, expected) {
 			t.Fatalf("documentation translations do not contain %q", expected)
 		}

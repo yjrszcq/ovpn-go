@@ -431,10 +431,11 @@
     document.querySelectorAll("#configuration-table th").forEach((header, index) => {
       header.textContent = text("configurationHeaders")[index];
     });
-    document.getElementById("listen-default").textContent = text("emptyValue");
+    document.getElementById("enabled-description").textContent = text("enabledDescription");
+    document.getElementById("port-description").textContent = text("portDescription");
     document.getElementById("listen-values").textContent = text("listenValues");
     document.getElementById("listen-description").textContent = text("listenDescription");
-    document.getElementById("cors-default").textContent = text("emptyValue");
+
     document.getElementById("cors-values").textContent = text("corsValues");
     document.getElementById("cors-description").textContent = text("corsDescription");
     document.getElementById("api-key-title").textContent = text("apiKeyTitle");

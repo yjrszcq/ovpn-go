@@ -34,7 +34,7 @@ GHCR numeric tags track the project version; Docker Hub numeric tags track the e
 Requires Linux TUN support, root/network administration privileges, Bash, curl, tar and SHA-256 verification tools. Wait until both architecture archives and `SHA256SUMS` are present on the Release page.
 
 ```bash
-sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/install.sh')"
 ```
 
 Choose a language (English by default), then Install, Update or Uninstall (Install by default). Enter your public hostname/IP; press Enter to accept defaults for the directory, version, port and other settings. Configuration is written once after confirmation; you then choose whether to start the service and enable it at boot. After Ctrl-C, rerun and select the same action to resume at the unfinished step.
@@ -128,6 +128,20 @@ chmod 600 laptop.ovpn
 
 Import the resulting profile into an OpenVPN client. Profiles contain private keys and must be transported and stored as credentials.
 
+## Configuration editing and REST API
+
+Run `sudo ovpn config edit` to edit configuration. Use `-e/--editor` to choose an editor, `-p/--plan` to plan after editing or `-a/--apply` to apply after editing. For Docker use `docker exec -it openvpn ovpn config edit`. API settings are stored in YAML and default to disabled:
+
+```yaml
+api:
+  enabled: false
+  listenIP: 127.0.0.1
+  port: 11940
+  cors: []
+```
+
+Empty `cors` disables CORS. The installer also prompts for API settings; activate changes through configuration apply. See the [REST API guide](docs/en/v4/rest-api.md). From the repository, `bash install.sh --dry-run` previews installation, update or uninstall without changing the system or retaining answers.
+
 ## Environment variables
 
 Persistent server settings belong in declarative YAML. Environment variables configure Compose, filesystem locations, one-time initialization, maintenance authorization, and development overrides; they are not a second long-lived configuration source.
@@ -142,10 +156,8 @@ Paths and editor defaults below describe Docker. Native defaults are relative to
 | `OVPN_CONFIG_FILE` | `/etc/ovpn-conf/config.yaml` | unset | Desired declarative YAML path. |
 | `OVPN_DATA_DIR` | `/etc/openvpn` | unset | Persistent data directory containing SQLite, PKI, artifacts, logs, and locks. |
 | `OVPN_RUNTIME_DIR` | `/run/openvpn-container` | unset | Ephemeral directory for runtime sockets and the server-process lock. |
-| `OVPN_API_LISTEN` | unset | empty | REST API v1 HTTP listen address in `address:port` form; an unset or empty value disables the API. Use `127.0.0.1:<unused-port>` for host-only access or `0.0.0.0:<unused-port>` for all IPv4 interfaces; host networking needs no `ports` mapping. |
-| `OVPN_API_CORS_ORIGINS` | unset | empty | Comma-separated domains or IPs, optionally with ports and without a scheme; an unset or empty value disables CORS. Example: `vpn-admin.example.com,192.0.2.10:3000`; `*` alone allows any HTTP(S) origin. |
 | `OVPN_MAINTENANCE` | unset | unset | Must be exactly `true` for `migrate apply`; the Compose maintenance service sets it automatically. |
-| `OVPN_EDITOR` | `EDITOR`, then `nano` | unset | Default editor executable for `client address edit` when `--editor/-e` is omitted. The image includes `nano`, `vim`, and `vi`. |
+| `OVPN_EDITOR` | `EDITOR`, then `nano` | unset | Default editor executable for `config edit` and `client address edit` when `--editor/-e` is omitted. The image includes `nano`, `vim`, and `vi`. |
 | `EDITOR` | `nano` | unset | Standard fallback editor executable when both `--editor/-e` and `OVPN_EDITOR` are unset. |
 
 ### One-time environment bootstrap
@@ -167,6 +179,10 @@ These variables are read only while initializing an empty instance with `OVPN_BO
 | `OVPN_BOOTSTRAP_NAT_ENABLED` | `false` | `false` | Masquerades client traffic leaving the VPN network namespace. |
 | `OVPN_BOOTSTRAP_NAT_INTERFACE` | `auto` | `auto` | NAT egress interface, or `auto` to resolve it from the route table. |
 | `OVPN_BOOTSTRAP_REDIRECT_GATEWAY` | `false` | `false` | Routes client default traffic through the VPN. |
+| `OVPN_BOOTSTRAP_API_ENABLED` | `false` | `false` | Enable the REST API. |
+| `OVPN_BOOTSTRAP_API_LISTEN_IP` | `127.0.0.1` | `127.0.0.1` | API listen IP. |
+| `OVPN_BOOTSTRAP_API_PORT` | `11940` | `11940` | API listener port. |
+| `OVPN_BOOTSTRAP_API_CORS` | `empty` | `empty` | Comma-separated scheme-less origins; empty disables CORS. |
 | `OVPN_BOOTSTRAP_DNS` | empty | empty | Comma-separated IPv4 DNS servers pushed to clients. |
 | `OVPN_BOOTSTRAP_ROUTES` | empty | empty | Comma-separated canonical IPv4 CIDRs pushed to clients. |
 | `OVPN_BOOTSTRAP_LOG_MAX_BYTES` | `10485760` | `10485760` | Maximum persistent OpenVPN log size in bytes before rotation. |
@@ -182,7 +198,7 @@ These variables replace trusted files, executables, or host networking interface
 | `OVPN_TEMPLATE_ROOT` | `/usr/local/share/openvpn-container/templates` | Root containing the template family selected by the compatibility contract. |
 | `OVPN_OPENVPN_BIN` | `openvpn` | OpenVPN executable used by runtime supervision, PKI validation, and capability inspection. |
 | `OVPN_BROKER_BIN` | `ovpn-broker` | Management broker executable supervised by `server run`. |
-| `OVPN_API_BIN` | `ovpn-api` | REST API executable used only when `OVPN_API_LISTEN` is non-empty. |
+| `OVPN_API_BIN` | `ovpn-api` | REST API executable used when applied `api.enabled` is true. |
 | `OVPN_EASYRSA_BIN` | `/usr/share/easy-rsa/easyrsa`, otherwise `easyrsa` | Easy-RSA executable used for PKI lifecycle operations. |
 | `OVPN_IP_BIN` | `ip` | Linux `ip` executable used by network reconciliation. |
 | `OVPN_IPTABLES_BIN` | `iptables` | Linux `iptables` executable used by firewall reconciliation. |

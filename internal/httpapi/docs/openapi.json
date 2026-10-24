@@ -2725,6 +2725,9 @@
           },
           "logging": {
             "$ref": "#/components/schemas/LoggingConfiguration"
+          },
+          "api": {
+            "$ref": "#/components/schemas/APIConfiguration"
           }
         },
         "description": "Complete normalized OpenVPN server configuration.",
@@ -3527,6 +3530,51 @@
         },
         "description": "Configuration apply result, activation report, and evaluated plan.",
         "x-description-zh": "配置应用结果、激活报告和已评估计划。"
+      },
+      "APIConfiguration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled",
+          "listen_ip",
+          "port",
+          "cors"
+        ],
+        "description": "Applied REST API settings. Omitted for defaults. JSON uses listen_ip; YAML uses listenIP.",
+        "x-description-zh": "REST API 设置。默认值时可省略。JSON 使用 listen_ip，YAML 使用 listenIP。",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether the REST API listener is enabled.",
+            "x-description-zh": "是否启用 REST API 监听。"
+          },
+          "listen_ip": {
+            "type": "string",
+            "default": "127.0.0.1",
+            "description": "IPv4 or IPv6 address for the REST API listener.",
+            "x-description-zh": "REST API 监听的 IPv4 或 IPv6 地址。"
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "default": 11940,
+            "description": "REST API listener port.",
+            "x-description-zh": "REST API 监听端口。"
+          },
+          "cors": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Allowed browser origin host and optional port.",
+              "x-description-zh": "允许的浏览器来源主机及可选端口。"
+            },
+            "default": [],
+            "description": "Scheme-less host[:port] origins, or [\"*\"]. Empty disables CORS.",
+            "x-description-zh": "不带协议的 host[:port] 来源列表，或 [\"*\"]。空列表关闭 CORS。"
+          }
+        }
       }
     }
   }

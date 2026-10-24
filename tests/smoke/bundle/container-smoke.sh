@@ -50,5 +50,6 @@ OVPN_CLI_UX_NATIVE=1 OVPN_CLI_UX_IMAGE="$image" OVPN_CLI_UX_SKIP_BUILD=1 OVPN_CL
 OVPN_LIFECYCLE_IMAGE="$image" OVPN_LIFECYCLE_SKIP_BUILD=1 OVPN_LIFECYCLE_REQUIRED=1 "$ROOT_DIR/tests/smoke/container/client-lifecycle-container-smoke.sh"
 OVPN_BACKUP_IMAGE="$image" OVPN_BACKUP_SKIP_BUILD=1 OVPN_BACKUP_REQUIRED=1 "$ROOT_DIR/tests/smoke/container/backup-restore-container-smoke.sh"
 OVPN_API_IMAGE="$image" OVPN_API_SKIP_BUILD=1 OVPN_API_REQUIRED=1 "$ROOT_DIR/tests/smoke/container/api-container-smoke.sh"
+python3 "$ROOT_DIR/tests/smoke/container/config-api-container-smoke.py" "$image"
 OVPN_E2E_IMAGE="$image" OVPN_E2E_SKIP_BUILD=1 OVPN_E2E_REQUIRED=1 "$ROOT_DIR/tests/smoke/container/e2e-container-smoke.sh"
 printf 'bundle container functional verification passed: %s %s\n' "$base" "$platform"

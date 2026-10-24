@@ -34,7 +34,7 @@ GHCR 数字 tag 对应项目版本，Docker Hub 数字 tag 对应内置 OpenVPN 
 需要 Linux TUN 支持、root/网络管理权限，以及 Bash、curl、tar 和 SHA-256 校验工具。请确认 Release 页面上的两个架构压缩包和 `SHA256SUMS` 均已齐全。
 
 ```bash
-sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/install.sh')"
 ```
 
 先选择语言（默认英文），再选择安装、更新或卸载（默认安装）。按提示填写公网域名或 IP；目录、版本、端口等均可直接回车使用默认值。配置确认后一次性写入，并询问是否启动服务和设置开机启动。中途按 Ctrl-C，重新运行并选择相同操作即可从未完成的步骤继续。
@@ -126,6 +126,20 @@ chmod 600 laptop.ovpn
 
 将 profile 导入 OpenVPN 客户端。profile 内含私钥，必须按凭据安全传输和保存。
 
+## 编辑配置与 REST API
+
+运行 `sudo ovpn config edit` 编辑配置；`-e/--editor` 指定编辑器，`-p/--plan` 编辑后查看计划，`-a/--apply` 编辑后应用。Docker 使用 `docker exec -it openvpn ovpn config edit`。API 设置保存在配置文件中，默认关闭：
+
+```yaml
+api:
+  enabled: false
+  listenIP: 127.0.0.1
+  port: 11940
+  cors: []
+```
+
+空 `cors` 关闭 CORS。安装向导也可配置 API；启用后通过配置 apply 生效。详见 [REST API](docs/cn/v4/rest-api.md)。在仓库目录可用 `bash install.sh --dry-run` 预览安装、更新或卸载；不会改动系统或保留答案。
+
 ## 环境变量
 
 服务端持久配置应写入声明式 YAML。环境变量只用于配置 Compose、文件系统路径、一次性初始化、maintenance 授权和开发覆盖，并不是第二套长期配置来源。
@@ -140,10 +154,8 @@ chmod 600 laptop.ovpn
 | `OVPN_CONFIG_FILE` | `/etc/ovpn-conf/config.yaml` | 未设置 | 期望状态声明式 YAML 的路径。 |
 | `OVPN_DATA_DIR` | `/etc/openvpn` | 未设置 | 保存 SQLite、PKI、artifact、日志和锁的持久数据目录。 |
 | `OVPN_RUNTIME_DIR` | `/run/openvpn-container` | 未设置 | 保存 runtime socket 和服务进程锁的临时目录。 |
-| `OVPN_API_LISTEN` | 未设置 | 空 | REST API v1 HTTP 监听地址，格式为 `地址:端口`；未设置或空值会关闭 API。仅宿主机访问填写 `127.0.0.1:<空闲端口>`，监听所有 IPv4 网卡填写 `0.0.0.0:<空闲端口>`；host network 不需要 `ports` 映射。 |
-| `OVPN_API_CORS_ORIGINS` | 未设置 | 空 | 填写不带协议、可带端口的域名或 IP，多个值用英文逗号分隔；未设置或空值会关闭 CORS。例如 `vpn-admin.example.com,192.0.2.10:3000`；单独填写 `*` 允许任意 HTTP(S) origin。 |
 | `OVPN_MAINTENANCE` | 未设置 | 未设置 | `migrate apply` 要求该值严格等于 `true`；Compose maintenance 服务会自动设置。 |
-| `OVPN_EDITOR` | `EDITOR`，然后 `nano` | 未设置 | 省略 `--editor/-e` 时，`client address edit` 使用的默认编辑器可执行文件；镜像内置 `nano`、`vim` 和 `vi`。 |
+| `OVPN_EDITOR` | `EDITOR`，然后 `nano` | 未设置 | 省略 `--editor/-e` 时，`config edit` 和 `client address edit` 使用的默认编辑器可执行文件；镜像内置 `nano`、`vim` 和 `vi`。 |
 | `EDITOR` | `nano` | 未设置 | 同时省略 `--editor/-e` 且未设置 `OVPN_EDITOR` 时使用的标准后备编辑器。 |
 
 ### 一次性环境变量初始化
@@ -165,6 +177,10 @@ chmod 600 laptop.ovpn
 | `OVPN_BOOTSTRAP_NAT_ENABLED` | `false` | `false` | 对离开 VPN 网络命名空间的客户端流量执行 NAT。 |
 | `OVPN_BOOTSTRAP_NAT_INTERFACE` | `auto` | `auto` | NAT 出口接口；`auto` 表示从路由表解析。 |
 | `OVPN_BOOTSTRAP_REDIRECT_GATEWAY` | `false` | `false` | 将客户端默认流量通过 VPN 转发。 |
+| `OVPN_BOOTSTRAP_API_ENABLED` | `false` | `false` | 启用 REST API。 |
+| `OVPN_BOOTSTRAP_API_LISTEN_IP` | `127.0.0.1` | `127.0.0.1` | API 监听 IP。 |
+| `OVPN_BOOTSTRAP_API_PORT` | `11940` | `11940` | API 监听端口。 |
+| `OVPN_BOOTSTRAP_API_CORS` | `空` | `空` | 逗号分隔的无协议来源；空值关闭 CORS。 |
 | `OVPN_BOOTSTRAP_DNS` | 空 | 空 | 推送给客户端的逗号分隔 IPv4 DNS 服务器。 |
 | `OVPN_BOOTSTRAP_ROUTES` | 空 | 空 | 推送给客户端的逗号分隔规范 IPv4 CIDR。 |
 | `OVPN_BOOTSTRAP_LOG_MAX_BYTES` | `10485760` | `10485760` | 持久 OpenVPN 日志触发轮转前的最大字节数。 |
@@ -180,7 +196,7 @@ chmod 600 laptop.ovpn
 | `OVPN_TEMPLATE_ROOT` | `/usr/local/share/openvpn-container/templates` | compatibility contract 所选模板族的根目录。 |
 | `OVPN_OPENVPN_BIN` | `openvpn` | runtime 监督、PKI 校验和 capability 检查使用的 OpenVPN 可执行文件。 |
 | `OVPN_BROKER_BIN` | `ovpn-broker` | `server run` 监督的 management broker 可执行文件。 |
-| `OVPN_API_BIN` | `ovpn-api` | 仅当 `OVPN_API_LISTEN` 非空时使用的 REST API 可执行文件。 |
+| `OVPN_API_BIN` | `ovpn-api` | applied 配置中 `api.enabled` 为 true 时使用的 REST API 可执行文件。 |
 | `OVPN_EASYRSA_BIN` | `/usr/share/easy-rsa/easyrsa`，否则 `easyrsa` | PKI 生命周期操作使用的 Easy-RSA 可执行文件。 |
 | `OVPN_IP_BIN` | `ip` | 网络 reconcile 使用的 Linux `ip` 可执行文件。 |
 | `OVPN_IPTABLES_BIN` | `iptables` | 防火墙 reconcile 使用的 Linux `iptables` 可执行文件。 |

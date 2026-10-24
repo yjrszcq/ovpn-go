@@ -105,12 +105,15 @@ session.expect('VPN port', '')
 session.expect('Enable NAT', '')
 session.expect('Route client Internet', '')
 session.expect('DNS servers', '')
+session.expect('Enable REST API', '')
 session.expect('Advanced settings', '')
 session.expect('Write this configuration', '')
 session.expect('Enable service at boot')
 os.write(session.master, b'\x03')
 session.finish(130)
 configuration_inode = (ROOT / 'config/config.yaml').stat().st_ino
+config_path = ROOT / 'config/config.yaml'
+config_path.write_bytes(b'# operator edit after configuration commit\n' + config_path.read_bytes())
 session = begin()
 session.expect('Enable service at boot', '')
 session.expect('Start service now', '')
@@ -163,6 +166,10 @@ session.expect('VPN 端口', '1195')
 session.expect('启用 NAT', 'yes')
 session.expect('客户端互联网流量', 'yes')
 session.expect('DNS 服务器', '1.1.1.1,8.8.8.8')
+session.expect('启用 REST API', 'yes')
+session.expect('API 监听 IP', '')
+session.expect('API 端口', '')
+session.expect('CORS 来源', '')
 session.expect('高级设置', 'yes')
 session.expect('传输地址族', 'ipv4')
 session.expect('动态地址池大小', '32')
@@ -211,6 +218,28 @@ for _ in range(60):
     time.sleep(1)
 else:
     raise AssertionError('Advanced configuration failed to start')
+# Installer defaults keep API on loopback and CORS disabled; query the actual listener.
+import urllib.request
+import urllib.error
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+for _ in range(60):
+    try:
+        with opener.open('http://127.0.0.1:11940/healthz', timeout=2) as response:
+            assert response.status == 200
+        break
+    except OSError:
+        time.sleep(1)
+else:
+    raise AssertionError('Installer API configuration did not activate')
+request = urllib.request.Request('http://127.0.0.1:11940/api/v1/state', method='OPTIONS',
+                                 headers={'Origin': 'http://localhost:3000',
+                                          'Access-Control-Request-Method': 'GET'})
+try:
+    opener.open(request, timeout=2)
+    raise AssertionError('Empty installer CORS unexpectedly allowed localhost')
+except urllib.error.HTTPError as error:
+    assert error.code == 400
+    assert error.headers.get('Access-Control-Allow-Origin') is None
 assert b'openvpn-docker:' in subprocess.check_output([str(ROOT / 'bin/iptables-save')])
 service('stop')
 assert b'openvpn-docker:' not in subprocess.check_output([str(ROOT / 'bin/iptables-save')])

@@ -24,6 +24,18 @@ skip_or_fail() {
 }
 
 cleanup() {
+  local result=$?
+  if [ "$result" != 0 ]; then
+    for container in "${active_containers[@]}"; do docker logs --tail 100 "$container" >&2 || true; done
+    if [ -n "$WORK_DIR" ]; then
+      for report in "$WORK_DIR"/*/api-apply.json "$WORK_DIR"/*/api-runtime.json; do
+        if [ -f "$report" ]; then
+          printf 'Failure evidence: %s\n' "$report" >&2
+          cat "$report" >&2
+        fi
+      done
+    fi
+  fi
   for container in "${active_containers[@]}"; do
     docker rm -f "$container" >/dev/null 2>&1 || true
   done
@@ -88,6 +100,11 @@ ipv4:
   redirectGateway: true
   dns: [1.1.1.1]
   routes: [$target_address/32]
+api:
+  enabled: true
+  listenIP: 0.0.0.0
+  port: 11940
+  cors: []
 logging:
   maxBytes: 10485760
   backups: 5
@@ -118,7 +135,7 @@ YAML
   active_networks+=("$network")
   docker run -d \
     --name "$server" \
-    -e OVPN_API_LISTEN=0.0.0.0:11940 -p 127.0.0.1::11940 \
+    -p 127.0.0.1::11940 \
     --network "$network" \
     --cap-add NET_ADMIN \
     --device /dev/net/tun \
@@ -171,7 +188,7 @@ YAML
   current_revision="$(curl -fsS -H "Authorization: Bearer $api_key" "$api_url/api/v1/config/applied" | jq -er '.revision')"
   jq -n --arg digest "$desired_digest" --argjson revision "$current_revision" \
     '{desired_digest:$digest,current_revision:$revision,force:false}' >"$protocol_dir/apply-request.json"
-  curl -fsS -X POST -H "Authorization: Bearer $api_key" -H 'Content-Type: application/json' \
+  curl --fail-with-body -sS -X POST -H "Authorization: Bearer $api_key" -H 'Content-Type: application/json' \
     --data-binary "@$protocol_dir/apply-request.json" "$api_url/api/v1/config/apply" >"$protocol_dir/api-apply.json"
   jq -e '.applied and .activation.runtime_restarted' "$protocol_dir/api-apply.json" >/dev/null
   curl -fsS -H "Authorization: Bearer $api_key" "$api_url/api/v1/config/applied" |
@@ -215,7 +232,7 @@ YAML
       '.clients[0].virtual_address == $address' <<<"$runtime_status" >/dev/null
   fi
 
-  curl -fsS -H "Authorization: Bearer $api_key" "$api_url/api/v1/runtime" >"$protocol_dir/api-runtime.json"
+  curl --fail-with-body -sS -H "Authorization: Bearer $api_key" "$api_url/api/v1/runtime" >"$protocol_dir/api-runtime.json"
   jq -e '.client_count == 1' "$protocol_dir/api-runtime.json" >/dev/null
 
   # Verify application data traverses the TUN device, in addition to the

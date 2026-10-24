@@ -47,6 +47,11 @@ server:
   endpoint: vpn.example.test
 ipv4:
   network: 10.71.0.0/24
+api:
+  enabled: true
+  listenIP: 0.0.0.0
+  port: 11940
+  cors: [console.example:8443, 192.0.2.10]
 YAML
 
 run_ovpn() {
@@ -66,8 +71,6 @@ CONTAINER="ovpn-api-smoke-$RANDOM-$$"
 docker run -d --name "$CONTAINER" \
   -v "$WORK_DIR/data:/etc/openvpn" \
   -v "$WORK_DIR/config:/etc/ovpn-conf" \
-  -e OVPN_API_LISTEN=0.0.0.0:11940 \
-  -e OVPN_API_CORS_ORIGINS=console.example:8443,192.0.2.10 \
   -p 127.0.0.1::11940 \
   --entrypoint ovpn-api \
   "$IMAGE" >/dev/null
@@ -115,12 +118,14 @@ fi
 grep -Fq 'window.apiDocsI18n' "$WORK_DIR/docs-i18n.js"
 grep -Fq 'title: "API 接口文档"' "$WORK_DIR/docs-i18n.js"
 grep -Fq 'title: "API Reference"' "$WORK_DIR/docs-i18n.js"
-grep -Fq '127.0.0.1:<空闲端口>' "$WORK_DIR/docs-i18n.js"
-grep -Fq '0.0.0.0:<unused-port>' "$WORK_DIR/docs-i18n.js"
-grep -Fq 'vpn-admin.example.com,192.0.2.10:3000' "$WORK_DIR/docs-i18n.js"
-grep -Fq '单独填写 *' "$WORK_DIR/docs-i18n.js"
-grep -Fq 'Use * alone' "$WORK_DIR/docs-i18n.js"
-grep -Fq 'configurationHeaders: ["变量", "默认值", "可填写值", "说明"]' "$WORK_DIR/docs-i18n.js"
+grep -Fq 'IPv4 / IPv6' "$WORK_DIR/docs-i18n.js"
+grep -Fq '空列表关闭 CORS' "$WORK_DIR/docs-i18n.js"
+grep -Fq 'an empty list disables CORS' "$WORK_DIR/docs-i18n.js"
+grep -Fq 'configurationHeaders: ["YAML 字段", "默认值", "可填写值", "说明"]' "$WORK_DIR/docs-i18n.js"
+grep -Fq '<code>api.enabled</code>' "$WORK_DIR/docs.html"
+grep -Fq '<code>api.listenIP</code>' "$WORK_DIR/docs.html"
+grep -Fq '<code>api.port</code>' "$WORK_DIR/docs.html"
+grep -Fq '<code>api.cors</code>' "$WORK_DIR/docs.html"
 grep -Fq 'apiKeyHeaders: ["命令", "说明"]' "$WORK_DIR/docs-i18n.js"
 grep -Fq '命令格式约定为' "$WORK_DIR/docs-i18n.js"
 grep -Fq '完整 secret 只会显示一次' "$WORK_DIR/docs-i18n.js"
@@ -283,12 +288,23 @@ test "$deleted_code" = 401
 test "$operation_count" -eq 22
 
 docker rm -f "$CONTAINER" >/dev/null
+docker run --rm -i -v "$WORK_DIR/config:/config" --entrypoint sh "$IMAGE" -ec 'cat > /config/config.yaml' <<'YAML'
+version: 1
+server:
+  endpoint: vpn.example.test
+ipv4:
+  network: 10.71.0.0/24
+api:
+  enabled: true
+  listenIP: 0.0.0.0
+  port: 11940
+  cors: ["*"]
+YAML
+run_ovpn config apply --yes
 CONTAINER="ovpn-api-cors-wildcard-$RANDOM-$$"
 docker run -d --name "$CONTAINER" \
   -v "$WORK_DIR/data:/etc/openvpn" \
   -v "$WORK_DIR/config:/etc/ovpn-conf" \
-  -e OVPN_API_LISTEN=0.0.0.0:11940 \
-  -e OVPN_API_CORS_ORIGINS='*' \
   -p 127.0.0.1::11940 \
   --entrypoint ovpn-api \
   "$IMAGE" >/dev/null

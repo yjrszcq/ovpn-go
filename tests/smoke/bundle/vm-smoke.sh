@@ -21,7 +21,7 @@ cleanup() {
 trap cleanup EXIT
 mkdir -p "$work/fixtures/releases"
 python3 "$ROOT_DIR/tests/smoke/bundle/fixtures.py" "$archive" "$work/fixtures"
-cp "$ROOT_DIR/scripts/install.sh" "$work/fixtures/"
+cp "$ROOT_DIR/install.sh" "$work/fixtures/"
 cp "$ROOT_DIR/tests/smoke/bundle/vm-guest.sh" "$work/fixtures/"
 cp "$ROOT_DIR/tests/smoke/bundle/installer-interactive.py" "$work/fixtures/"
 printf '%s\n' "$install_dir" >"$work/fixtures/install-dir"

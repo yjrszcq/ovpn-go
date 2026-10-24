@@ -6,49 +6,30 @@ API 默认关闭，内部仅使用 HTTP，不管理 TLS 证书。远程访问时
 
 启用 API 后可直接访问内置开发文档：
 
-- `http://<OVPN_API_LISTEN>/docs/`：面向前端的完整接口文档。22 条接口各自独立展示自己的完整 HTTP 请求、参数、body 字段、成功返回、错误返回和 JSON 示例，不需要跳到共享模型区拼装。页面默认跟随浏览器语言（中文浏览器使用中文，其他语言使用英文），也可通过右上角手动切换并保留选择。
-- `http://<OVPN_API_LISTEN>/docs/openapi.json`：OpenAPI 3.1 规范，可导入 Orval、OpenAPI Generator、NSwag 或 API 客户端。
+- `http://<listenIP>:<port>/docs/`：面向前端的完整接口文档。22 条接口各自独立展示自己的完整 HTTP 请求、参数、body 字段、成功返回、错误返回和 JSON 示例，不需要跳到共享模型区拼装。页面默认跟随浏览器语言（中文浏览器使用中文，其他语言使用英文），也可通过右上角手动切换并保留选择。
+- `http://<listenIP>:<port>/docs/openapi.json`：OpenAPI 3.1 规范，可导入 Orval、OpenAPI Generator、NSwag 或 API 客户端。
 
 文档页面和 OpenAPI 文件不要求 API key；实际 `/api/v1/*` 资源仍然必须认证。
 
 ## 启用 API
 
-Docker 部署在在线 `openvpn` 服务中设置非空监听地址：
+在配置文件中设置 API，使用 `ovpn config edit -a` 编辑并应用；Docker 使用 `docker exec -it openvpn ovpn config edit -a`。默认关闭 API，监听 IP 默认 `127.0.0.1`，端口默认 `11940`。
 
 ```yaml
-services:
-  openvpn:
-    environment:
-      OVPN_API_LISTEN: 127.0.0.1:11940
-      OVPN_API_CORS_ORIGINS: vpn-admin.example.com
+api:
+  enabled: true
+  listenIP: 127.0.0.1
+  port: 11940
+  cors: []
 ```
 
-裸机安装在服务环境或前台进程中设置相同变量，见[裸机 API 配置](native-linux.md#api-与离线维护)。修改服务环境后需重启裸机服务。
+`api.listenIP` 接受 IPv4 或 IPv6 地址；`0.0.0.0` 监听所有 IPv4 网卡。端口必须为未占用的 1–65535；host network 不需要 ports 映射。修改后通过配置 apply 生效，也可通过 REST 配置接口应用；关闭或变更 API 监听会先完成当前请求。
 
-`OVPN_API_LISTEN` 使用 `地址:端口` 格式，端口可以是宿主机上任意未占用的 `1-65535` 端口：
+`api.cors: []` 关闭 CORS，包括 localhost 的跨域请求。同源浏览器和非浏览器客户端不需要 CORS。允许来源使用不带协议的 `host[:port]` YAML 列表，例如 `[vpn-admin.example.com, "192.0.2.10:3000"]`；`["*"]` 允许任意有效 HTTP(S) 来源，必须单独使用。主机名不区分大小写，端口精确匹配，不允许路径或凭据。CORS 不代替认证和网络访问控制。
 
-| 示例 | 访问范围 |
-|---|---|
-| `127.0.0.1:11940` | 仅监听宿主机 IPv4 loopback，推荐配合本机 HTTPS 反向代理使用。地址后的 `11940` 可替换为其他空闲端口。 |
-| `0.0.0.0:11940` | 监听宿主机所有 IPv4 网卡；地址后的 `11940` 可替换为其他空闲端口。是否能从局域网或公网访问还取决于宿主机防火墙、云安全组和路由。 |
+Docker 首次初始化可以使用 `OVPN_BOOTSTRAP_API_ENABLED`、`OVPN_BOOTSTRAP_API_LISTEN_IP`、`OVPN_BOOTSTRAP_API_PORT`、`OVPN_BOOTSTRAP_API_CORS`（逗号分隔来源）。它们仅在 `OVPN_BOOTSTRAP_FROM_ENV=true` 且实例为空时生成配置；之后以 YAML 为准。旧 `OVPN_API_LISTEN` 和 `OVPN_API_CORS_ORIGINS` 不再生效。
 
-项目 Compose 使用 `network_mode: host`，因此端口直接占用宿主机端口，不需要也不能依靠 Compose `ports` 映射解决冲突。`OVPN_API_LISTEN` 为空时不会启动 API 进程。不要包含 `http://` 或 `https://` 协议前缀，也不要把这些变量加入 `openvpn-maintenance`。
-
-`OVPN_API_CORS_ORIGINS` 可选，用于允许跨域浏览器前端访问 API。配置值不带 `http://` 或 `https://`，支持以下格式：
-
-| 配置值 | 含义 |
-|---|---|
-| 空 | 关闭 CORS；同源前端或非浏览器客户端不需要配置。 |
-| `vpn-admin.example.com` | 允许该域名，不限制浏览器 origin 使用 HTTP 或 HTTPS。 |
-| `vpn-admin.example.com:3000` | 允许该域名的指定端口。 |
-| `192.0.2.10` | 允许该 IP。 |
-| `192.0.2.10:3000` | 允许该 IP 的指定端口。 |
-| `*` | 允许任意合法的 HTTP/HTTPS origin；`*` 必须单独填写。 |
-| `vpn-admin.example.com,192.0.2.10:3000` | 使用英文逗号分隔多个域名、IP 或带端口的值。 |
-
-匹配时主机名不区分大小写，端口必须精确匹配。不要填写协议、路径、query 或凭据；也不要产生空列表项，例如结尾多写逗号。使用 `*` 会扩大浏览器访问范围，只应在明确需要时启用。
-
-最小 Caddy 边界如下：
+HTTPS 反向代理示例：
 
 ```caddyfile
 vpn-admin.example.com {
@@ -4108,6 +4089,11 @@ Authorization: Bearer ovpn_v1.<uuid>.<secret>
 | `config.ipv4.redirect_gateway` | `boolean` | 是 | 示例: false | 生成的配置文件是否将默认 IPv4 路由重定向到 VPN。 |
 | `config.ipv4.dns` | `string[]` | 是 | 示例: [] | 推送给客户端的 IPv4 DNS 服务器。 |
 | `config.ipv4.routes` | `string[]` | 是 | 示例: [] | 推送给客户端的其他 IPv4 CIDR 路由。 |
+| `config.api` | `object` | 否 | - | API 设置；默认时可省略。 |
+| `config.api.enabled` | `boolean` | api 存在时必填 | 默认：false | 启用监听。 |
+| `config.api.listen_ip` | `string` | api 存在时必填 | 默认：127.0.0.1 | IPv4 或 IPv6 监听地址。 |
+| `config.api.port` | `integer` | api 存在时必填 | 1–65535；默认：11940 | 监听端口。 |
+| `config.api.cors` | `string[]` | api 存在时必填 | 默认：[] | 空列表关闭 CORS；不带协议的来源或 ["*"]。 |
 | `config.logging` | `object` | 是 | - | 运行时日志轮转设置。 |
 | `config.logging.max_bytes` | `integer` | 是 | 最小值: 1；示例: 10485760 | 触发轮转前活动日志文件的最大字节数。 |
 | `config.logging.backups` | `integer` | 是 | 最小值: 0；示例: 5 | 保留的轮转日志文件数量。 |
@@ -4326,6 +4312,11 @@ Authorization: Bearer ovpn_v1.<uuid>.<secret>
 | `config.ipv4.redirect_gateway` | `boolean` | 是 | 示例: false | 生成的配置文件是否将默认 IPv4 路由重定向到 VPN。 |
 | `config.ipv4.dns` | `string[]` | 是 | 示例: [] | 推送给客户端的 IPv4 DNS 服务器。 |
 | `config.ipv4.routes` | `string[]` | 是 | 示例: [] | 推送给客户端的其他 IPv4 CIDR 路由。 |
+| `config.api` | `object` | 否 | - | API 设置；默认时可省略。 |
+| `config.api.enabled` | `boolean` | api 存在时必填 | 默认：false | 启用监听。 |
+| `config.api.listen_ip` | `string` | api 存在时必填 | 默认：127.0.0.1 | IPv4 或 IPv6 监听地址。 |
+| `config.api.port` | `integer` | api 存在时必填 | 1–65535；默认：11940 | 监听端口。 |
+| `config.api.cors` | `string[]` | api 存在时必填 | 默认：[] | 空列表关闭 CORS；不带协议的来源或 ["*"]。 |
 | `config.logging` | `object` | 是 | - | 运行时日志轮转设置。 |
 | `config.logging.max_bytes` | `integer` | 是 | 最小值: 1；示例: 10485760 | 触发轮转前活动日志文件的最大字节数。 |
 | `config.logging.backups` | `integer` | 是 | 最小值: 0；示例: 5 | 保留的轮转日志文件数量。 |
@@ -4525,6 +4516,11 @@ JSON 格式有效，但违反客户端、IPv4 或配置语义规则。
 | `ipv4.redirect_gateway` | `body` | `boolean` | 是 | 示例: false | 生成的配置文件是否将默认 IPv4 路由重定向到 VPN。 |
 | `ipv4.dns` | `body` | `string[]` | 是 | 示例: ["1.1.1.1"] | 推送给客户端的 IPv4 DNS 服务器。 |
 | `ipv4.routes` | `body` | `string[]` | 是 | 示例: ["10.20.0.0/16"] | 推送给客户端的其他 IPv4 CIDR 路由。 |
+| `api` | `body` | `object` | 否 | - | API 设置；默认时可省略。 |
+| `api.enabled` | `body` | `boolean` | api 存在时必填 | 默认：false | 启用监听。 |
+| `api.listen_ip` | `body` | `string` | api 存在时必填 | 默认：127.0.0.1 | IPv4 或 IPv6 监听地址。 |
+| `api.port` | `body` | `integer` | api 存在时必填 | 1–65535；默认：11940 | 监听端口。 |
+| `api.cors` | `body` | `string[]` | api 存在时必填 | 默认：[] | 空列表关闭 CORS；不带协议的来源或 ["*"]。 |
 | `logging` | `body` | `object` | 是 | - | 运行时日志轮转设置。 |
 | `logging.max_bytes` | `body` | `integer` | 是 | 最小值: 1；示例: 10485760 | 触发轮转前活动日志文件的最大字节数。 |
 | `logging.backups` | `body` | `integer` | 是 | 最小值: 0；示例: 5 | 保留的轮转日志文件数量。 |
@@ -4626,6 +4622,11 @@ Content-Type: application/json
 | `config.ipv4.redirect_gateway` | `boolean` | 是 | 示例: false | 生成的配置文件是否将默认 IPv4 路由重定向到 VPN。 |
 | `config.ipv4.dns` | `string[]` | 是 | 示例: [] | 推送给客户端的 IPv4 DNS 服务器。 |
 | `config.ipv4.routes` | `string[]` | 是 | 示例: [] | 推送给客户端的其他 IPv4 CIDR 路由。 |
+| `config.api` | `object` | 否 | - | API 设置；默认时可省略。 |
+| `config.api.enabled` | `boolean` | api 存在时必填 | 默认：false | 启用监听。 |
+| `config.api.listen_ip` | `string` | api 存在时必填 | 默认：127.0.0.1 | IPv4 或 IPv6 监听地址。 |
+| `config.api.port` | `integer` | api 存在时必填 | 1–65535；默认：11940 | 监听端口。 |
+| `config.api.cors` | `string[]` | api 存在时必填 | 默认：[] | 空列表关闭 CORS；不带协议的来源或 ["*"]。 |
 | `config.logging` | `object` | 是 | - | 运行时日志轮转设置。 |
 | `config.logging.max_bytes` | `integer` | 是 | 最小值: 1；示例: 10485760 | 触发轮转前活动日志文件的最大字节数。 |
 | `config.logging.backups` | `integer` | 是 | 最小值: 0；示例: 5 | 保留的轮转日志文件数量。 |
@@ -5523,7 +5524,7 @@ digest 变化、applied revision 变化、mutation 锁占用或 plan 状态过�
 
 ## 安全边界
 
-- 不需要远程管理时保持 `OVPN_API_LISTEN` 为空。
+- 不需要远程管理时保持 `api.enabled: false`。
 - 绑定 loopback 或私有管理网络，在可信反向代理终止 TLS。
 - 除 API 认证外，还应独立限制反向代理和宿主机防火墙访问。
 - 每个集成使用独立 API key，并及时删除不用的 key。

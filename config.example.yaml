@@ -34,3 +34,10 @@ ipv4:
 logging:
   maxBytes: 10485760
   backups: 5
+
+# REST management; empty CORS disables cross-origin access.
+api:
+  enabled: false
+  listenIP: 127.0.0.1
+  port: 11940
+  cors: []

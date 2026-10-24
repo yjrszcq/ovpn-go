@@ -65,6 +65,10 @@ run_bootstrap() {
     -e OVPN_BOOTSTRAP_PROTOCOL=tcp \
     -e OVPN_BOOTSTRAP_PORT=443 \
     -e OVPN_BOOTSTRAP_DNS=1.1.1.1,8.8.8.8 \
+    -e OVPN_BOOTSTRAP_API_ENABLED=true \
+    -e OVPN_BOOTSTRAP_API_LISTEN_IP=127.0.0.1 \
+    -e OVPN_BOOTSTRAP_API_PORT=11941 \
+    -e OVPN_BOOTSTRAP_API_CORS=console.example:3000 \
     -v "$WORK_DIR/bootstrap-data:/etc/openvpn" \
     -v "$WORK_DIR/bootstrap-config:/etc/ovpn-conf" \
     --entrypoint ovpn \
@@ -122,6 +126,7 @@ config
 config validate
 config show
 config export
+config edit
 config plan
 config apply
 client
@@ -222,6 +227,9 @@ grep -Fq 'generated initial declarative configuration' "$WORK_DIR/bootstrap-init
 bootstrap_config_contains 'endpoint: bootstrap.example.test'
 bootstrap_config_contains 'protocol: tcp'
 bootstrap_config_contains 'port: 443'
+bootstrap_config_contains 'listenIP: 127.0.0.1'
+bootstrap_config_contains 'port: 11941'
+bootstrap_config_contains 'console.example:3000'
 test "$(docker run --rm -v "$WORK_DIR/bootstrap-config:/etc/ovpn-conf:ro" --entrypoint stat "$IMAGE" -c %a /etc/ovpn-conf/config.yaml)" = 600
 run_bootstrap bootstrap.example.test config validate --json >"$WORK_DIR/bootstrap-validate.json"
 grep -Fq '"valid":true' "$WORK_DIR/bootstrap-validate.json"
