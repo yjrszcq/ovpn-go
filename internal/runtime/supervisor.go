@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"syscall"
 	"time"
@@ -146,15 +148,35 @@ func (supervisor Supervisor) Run(ctx context.Context, hup <-chan os.Signal, inst
 	if err := startRuntime(); err != nil {
 		return err
 	}
-	if supervisor.APIBinary != "" {
-		apiCommand := commandBuilder(supervisor.APIBinary)
-		apiCommand.Stderr = os.Stderr
-		api, err = startProcess(apiCommand)
-		if err != nil {
-			return fmt.Errorf("start management API: %w", err)
+	reconcileAPI := func(previous *domain.APIConfig) error {
+		settings := configservice.EffectiveAPI(instance.Applied.Config.API)
+		if api == nil {
+			if !settings.Enabled {
+				return nil
+			}
+			if supervisor.APIBinary == "" {
+				return fmt.Errorf("API executable is required when api.enabled is true")
+			}
+			apiCommand := commandBuilder(supervisor.APIBinary)
+			apiCommand.Stderr = os.Stderr
+			api, err = startProcess(apiCommand)
+			if err != nil {
+				return fmt.Errorf("start management API: %w", err)
+			}
+			apiDone = api.done
+		} else if previous != nil && !reflect.DeepEqual(configservice.EffectiveAPI(*previous), settings) {
+			// The API drains active requests on HUP, so a REST apply can return before
+			// switching listeners or becoming idle when disabled.
+			if err := signalProcess(api, syscall.SIGHUP); err != nil {
+				return fmt.Errorf("reload management API: %w", err)
+			}
 		}
-		apiDone = api.done
+		return nil
 	}
+	if err := reconcileAPI(nil); err != nil {
+		return err
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -204,12 +226,16 @@ func (supervisor Supervisor) Run(ctx context.Context, hup <-chan os.Signal, inst
 			case <-ctx.Done():
 				return nil
 			}
+			previousAPI := instance.Applied.Config.API
 			runtimeLock, err = acquireLock(ctx, artifact.RuntimeLockPath(supervisor.DataDir), artifact.LockShared, supervisor.LockTimeout)
 			if err == nil {
 				instance, err = reload(ctx, supervisor.DataDir)
 			}
 			if err == nil {
 				err = startRuntime()
+			}
+			if err == nil {
+				err = reconcileAPI(&previousAPI)
 			}
 			request.done <- err
 			if err != nil {

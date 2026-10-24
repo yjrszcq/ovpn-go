@@ -31,6 +31,7 @@ type Authenticator interface {
 type handler struct {
 	authenticator Authenticator
 	origins       map[string]struct{}
+	localOrigins  bool
 	resources     Resources
 }
 
@@ -158,7 +159,7 @@ func NewHandler(authenticator Authenticator, allowedOrigins []string, resources 
 		}
 		origins[normalized] = struct{}{}
 	}
-	return &handler{authenticator: authenticator, origins: origins, resources: resources}, nil
+	return &handler{authenticator: authenticator, origins: origins, localOrigins: len(allowedOrigins) == 0, resources: resources}, nil
 }
 
 func (handler *handler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
@@ -362,7 +363,16 @@ func (handler *handler) applyCORS(response http.ResponseWriter, request *http.Re
 		return false
 	}
 	_, wildcard := handler.origins["*"]
-	if _, ok := handler.origins[host]; !ok && !wildcard {
+	localAllowed := false
+	if handler.localOrigins {
+		parsed, parseErr := url.Parse(origin)
+		if parseErr == nil {
+			name := strings.ToLower(parsed.Hostname())
+			_, validErr := configservice.NormalizeCORSOrigin(host)
+			localAllowed = validErr == nil && (name == "localhost" || name == "127.0.0.1")
+		}
+	}
+	if _, ok := handler.origins[host]; !ok && !wildcard && !localAllowed {
 		return false
 	}
 	response.Header().Set("Access-Control-Allow-Origin", origin)
@@ -395,20 +405,7 @@ func versionedPath(path string) bool {
 }
 
 func normalizeAllowedOrigin(origin string) (string, error) {
-	if origin == "*" {
-		return origin, nil
-	}
-	parsed, err := url.Parse("//" + origin)
-	if err != nil || origin == "" || strings.Contains(origin, "://") || strings.ContainsAny(origin, " \t\r\n*#") || parsed.Host == "" || parsed.Hostname() == "" || parsed.User != nil || parsed.Path != "" || parsed.ForceQuery || parsed.RawQuery != "" || parsed.Fragment != "" || strings.HasSuffix(parsed.Host, ":") {
-		return "", errors.New("CORS origins must be hostnames or IP addresses with an optional port, without a scheme")
-	}
-	if port := parsed.Port(); port != "" {
-		number, conversionErr := strconv.Atoi(port)
-		if conversionErr != nil || number < 1 || number > 65535 {
-			return "", errors.New("CORS origin ports must be between 1 and 65535")
-		}
-	}
-	return strings.ToLower(parsed.Host), nil
+	return configservice.NormalizeCORSOrigin(origin)
 }
 
 func originHost(origin string) (string, error) {

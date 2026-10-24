@@ -296,3 +296,27 @@ func TestAuthenticatedIdentityReachesResources(t *testing.T) {
 		t.Fatalf("response=%d body=%q", response.Code, response.Body.String())
 	}
 }
+
+func TestEmptyCORSAllowsOnlyLocalhostOriginsAtAnyValidPort(t *testing.T) {
+	handler, err := NewHandler(fakeAuthenticator{}, nil, Resources{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		origin  string
+		allowed bool
+	}{
+		{"http://localhost", true}, {"https://localhost:3000", true}, {"http://127.0.0.1:8080", true},
+		{"http://localhost.evil.test:3000", false}, {"http://127.0.0.2:3000", false}, {"http://[::1]:3000", false},
+		{"https://example.test", false}, {"null", false}, {"http://localhost:0", false}, {"http://localhost:65536", false},
+	} {
+		request := httptest.NewRequest(http.MethodOptions, "/api/v1/clients", nil)
+		request.Header.Set("Origin", test.origin)
+		request.Header.Set("Access-Control-Request-Method", http.MethodGet)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if (response.Code == http.StatusNoContent) != test.allowed {
+			t.Fatalf("origin=%s status=%d body=%s", test.origin, response.Code, response.Body)
+		}
+	}
+}

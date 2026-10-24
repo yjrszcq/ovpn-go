@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -36,51 +35,72 @@ func main() {
 }
 
 func run() error {
-	listenAddress := os.Getenv("OVPN_API_LISTEN")
-	if listenAddress == "" {
-		return fmt.Errorf("OVPN_API_LISTEN is required")
-	}
-	dataDir := os.Getenv("OVPN_DATA_DIR")
-	if dataDir == "" {
-		dataDir = initialize.DefaultDataDir
-	}
+	dataDir := environmentOr("OVPN_DATA_DIR", initialize.DefaultDataDir)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	defer signal.Stop(hup)
 	database, err := storesqlite.Open(ctx, filepath.Join(dataDir, "meta", "state.db"))
 	if err != nil {
 		return fmt.Errorf("open authoritative state: %w", err)
 	}
 	defer database.Close()
-	instance, err := database.LoadOnlyInstance(ctx)
-	if err != nil {
-		return fmt.Errorf("load instance: %w", err)
+	for {
+		instance, err := database.LoadOnlyInstance(ctx)
+		if err != nil {
+			return fmt.Errorf("load instance: %w", err)
+		}
+		settings := configservice.EffectiveAPI(instance.Applied.Config.API)
+		if !settings.Enabled {
+			// Keep an already-running API child idle after disabling it. A later apply
+			// can enable it again without dropping the current REST apply response.
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-hup:
+				continue
+			}
+		}
+		authenticator, err := apikey.NewService(database, instance.ID)
+		if err != nil {
+			return err
+		}
+		resources, err := newResources(database, instance.ID, dataDir)
+		if err != nil {
+			return err
+		}
+		handler, err := httpapi.NewHandler(authenticator, settings.CORS, resources)
+		if err != nil {
+			return err
+		}
+		address := configservice.APIAddress(settings)
+		server, err := httpapi.NewServer(address, handler)
+		if err != nil {
+			return err
+		}
+		listener, err := net.Listen("tcp", address)
+		if err != nil {
+			return fmt.Errorf("listen on API address: %w", err)
+		}
+		log.Printf("ovpn-api: listening on %s", listener.Addr())
+		serveCtx, cancel := context.WithCancel(ctx)
+		done := make(chan error, 1)
+		go func() { done <- httpapi.Serve(serveCtx, listener, server) }()
+		select {
+		case <-ctx.Done():
+			cancel()
+			return <-done
+		case <-hup:
+			cancel()
+			if err := <-done; err != nil {
+				return err
+			}
+		case err := <-done:
+			cancel()
+			return err
+		}
 	}
-	authenticator, err := apikey.NewService(database, instance.ID)
-	if err != nil {
-		return err
-	}
-	origins, err := parseOrigins(os.Getenv("OVPN_API_CORS_ORIGINS"))
-	if err != nil {
-		return err
-	}
-	resources, err := newResources(database, instance.ID, dataDir)
-	if err != nil {
-		return err
-	}
-	handler, err := httpapi.NewHandler(authenticator, origins, resources)
-	if err != nil {
-		return err
-	}
-	server, err := httpapi.NewServer(listenAddress, handler)
-	if err != nil {
-		return err
-	}
-	listener, err := net.Listen("tcp", listenAddress)
-	if err != nil {
-		return fmt.Errorf("listen on API address: %w", err)
-	}
-	log.Printf("ovpn-api: listening on %s", listener.Addr())
-	return httpapi.Serve(ctx, listener, server)
 }
 
 func newResources(database *storesqlite.Store, instanceID, dataDir string) (httpapi.Resources, error) {
@@ -251,21 +271,4 @@ func apiEasyRSABinary() string {
 		return "/usr/share/easy-rsa/easyrsa"
 	}
 	return "easyrsa"
-}
-
-func parseOrigins(value string) ([]string, error) {
-	if value == "" {
-		return nil, nil
-	}
-	parts := strings.Split(value, ",")
-	for index := range parts {
-		parts[index] = strings.TrimSpace(parts[index])
-		if parts[index] == "" {
-			return nil, fmt.Errorf("OVPN_API_CORS_ORIGINS contains an empty origin")
-		}
-		if parts[index] == "*" && len(parts) != 1 {
-			return nil, fmt.Errorf("OVPN_API_CORS_ORIGINS wildcard must be used alone")
-		}
-	}
-	return parts, nil
 }

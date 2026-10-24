@@ -83,8 +83,14 @@ func TestRuntimeHelperProcess(t *testing.T) {
 			os.Exit(6)
 		}
 		signals := make(chan os.Signal, 1)
-		signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
-		<-signals
+		signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+		for value := range signals {
+			if value == syscall.SIGHUP {
+				_ = os.WriteFile(filepath.Join(markerDir, "api-hup"), []byte("ok"), 0600)
+				continue
+			}
+			return
+		}
 	default:
 		os.Exit(2)
 	}
@@ -164,7 +170,7 @@ func TestSupervisorStartsAndStopsOptionalAPI(t *testing.T) {
 	supervisor.APIBinary = "fake-api"
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- supervisor.Run(ctx, nil, testInstance()) }()
+	go func() { done <- supervisor.Run(ctx, nil, testAPIInstance()) }()
 	waitForFile(t, filepath.Join(markers, "api-started"))
 	waitForFile(t, filepath.Join(markers, "openvpn-started"))
 	cancel()
@@ -186,7 +192,7 @@ func TestSupervisorFailsWhenOptionalAPIExits(t *testing.T) {
 	installHelperBuilder(t)
 	supervisor := testSupervisor(filepath.Join(t.TempDir(), "data"), filepath.Join(t.TempDir(), "run"))
 	supervisor.APIBinary = "fake-api"
-	err := supervisor.Run(context.Background(), nil, testInstance())
+	err := supervisor.Run(context.Background(), nil, testAPIInstance())
 	if err == nil || !strings.Contains(err.Error(), "management API exited") {
 		t.Fatalf("unexpected API exit error: %v", err)
 	}
@@ -275,11 +281,11 @@ func TestSupervisorPausesForApplyAndRestartsRuntime(t *testing.T) {
 	var reloads atomic.Int32
 	supervisor.ReloadInstance = func(context.Context, string) (storesqlite.InstanceState, error) {
 		reloads.Add(1)
-		return testInstance(), nil
+		return testAPIInstance(), nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- supervisor.Run(ctx, nil, testInstance()) }()
+	go func() { done <- supervisor.Run(ctx, nil, testAPIInstance()) }()
 	waitForFile(t, filepath.Join(markers, "openvpn-started"))
 	waitForFile(t, filepath.Join(markers, "api-started"))
 	apiPIDData, err := os.ReadFile(filepath.Join(markers, "api-started"))
@@ -461,4 +467,55 @@ func waitForFile(t *testing.T, path string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %s", path)
+}
+
+func testAPIInstance() storesqlite.InstanceState {
+	instance := testInstance()
+	instance.Applied.Config.API.Enabled = true
+	return instance
+}
+
+func TestSupervisorActivatesAPIAndReloadsItAfterApply(t *testing.T) {
+	markers := t.TempDir()
+	t.Setenv("OVPN_RUNTIME_HELPER", "1")
+	t.Setenv("OVPN_RUNTIME_MARKERS", markers)
+	installHelperBuilder(t)
+	supervisor := testSupervisor(filepath.Join(t.TempDir(), "data"), filepath.Join(t.TempDir(), "run"))
+	supervisor.APIBinary = "fake-api"
+	var enabled atomic.Bool
+	supervisor.ReloadInstance = func(context.Context, string) (storesqlite.InstanceState, error) {
+		instance := testInstance()
+		instance.Applied.Config.API.Enabled = enabled.Load()
+		return instance, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- supervisor.Run(ctx, nil, testInstance()) }()
+	waitForFile(t, filepath.Join(markers, "openvpn-started"))
+	if _, err := os.Stat(filepath.Join(markers, "api-started")); !os.IsNotExist(err) {
+		t.Fatalf("disabled API unexpectedly started: %v", err)
+	}
+	enabled.Store(true)
+	session, err := BeginApply(ctx, supervisor.RuntimeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Resume(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitForFile(t, filepath.Join(markers, "api-started"))
+	enabled.Store(false)
+	session, err = BeginApply(ctx, supervisor.RuntimeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Resume(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitForFile(t, filepath.Join(markers, "api-hup"))
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 }
