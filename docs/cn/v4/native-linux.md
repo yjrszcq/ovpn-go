@@ -14,20 +14,17 @@ x86-64 使用 `linux-amd64`，AArch64 使用 `linux-arm64`。宿主需要 Linux 
 sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
 ```
 
-安装器自动选择最新稳定 Release 和宿主架构，验证压缩包后安装到 `/opt/ovpn`，创建 `/usr/local/bin/ovpn`，并注册 systemd 或 OpenRC 服务。首次安装保持服务停止，也不启用开机启动。遇到无关的已有命令、目录或服务定义时拒绝覆盖。
+安装器先询问语言（默认 English），再询问安装、更新或卸载（默认安装）。安装目录默认 `/opt/ovpn`，版本默认最新稳定 Release；其他有默认值的选项直接回车即可。公网域名或 IP 必须填写。后续交互包括 VPN 网段、传输协议、端口、NAT、DNS 和可选高级配置。
 
-需要指定目录和已发布版本时，替换 `vX.Y.Z`：
+脚本自动识别宿主架构，验证压缩包，创建 `/usr/local/bin/ovpn` 并注册 systemd 或 OpenRC 服务。配置经校验和确认后一次性写入，再询问是否启用开机启动、是否立即启动（均默认 yes）。遇到无关的已有命令、目录或服务定义时拒绝覆盖，每台宿主支持一个托管服务。
 
-```bash
-sudo env OVPN_INSTALL_DIR=/opt/vpn OVPN_VERSION=vX.Y.Z bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
-```
-
-后续更新请使用相同的 `OVPN_INSTALL_DIR`。每台宿主支持一个由安装器管理的 `ovpn` 服务。
+按 Ctrl-C 可中断；重新运行并选择相同操作后，保留已完成的答案，从未完成的问题继续。未完成的交互不会生成生效配置；已有配置不会被重新安装覆盖。安装或更新参数均在交互中选择，无需设置环境变量。请确认网段不重叠，并自行在宿主与云防火墙放行端口。
 
 ## 配置与启动
 
+交互安装已完成配置和启动选择。以下命令用于后续手动编辑、启动，或选择暂不启动后的操作。
+
 ```bash
-sudo cp /opt/ovpn/config/config.example.yaml /opt/ovpn/config/config.yaml
 sudo /opt/ovpn/bin/nano /opt/ovpn/config/config.yaml
 ```
 
@@ -111,14 +108,18 @@ sudo env OVPN_MAINTENANCE=true /opt/ovpn/ovpn migrate plan
 ## 更新与恢复
 
 ```bash
-sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/update.sh')"
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
 ```
 
-更新器先下载验证，再锁定安装目录。服务原先运行时，会停止、保存快照、更新并重启检查健康；原先停止则继续停止。用户配置、证书、数据库、客户端配置、日志、权限和开机启动状态会保留。替换或健康检查失败时恢复旧程序和快照。更新中断后，再次执行更新器即可恢复事务；若 `.update-backup/` 仍保留，表示恢复需要处理，请在实例恢复健康前保留它。
+重新运行脚本并选择“更新”。更新器先下载验证，再锁定安装目录。服务原先运行时，会停止、保存快照、更新并重启检查健康；原先停止则继续停止。用户配置、证书、数据库、客户端配置、日志、权限和开机启动状态会保留。替换或健康检查失败时恢复旧程序和快照。更新中断后，再次执行更新器即可恢复事务；若 `.update-backup/` 仍保留，表示恢复需要处理，请在实例恢复健康前保留它。
 
-自定义安装目录需要向更新器传入相同的 `OVPN_INSTALL_DIR`；指定已发布版本时设置 `OVPN_VERSION=vX.Y.Z`。
+在交互中确认安装目录，选择最新稳定版或填写已发布版本号。
 
 更新仅允许兼容的数据 schema，并拒绝降级。重复安装、同版本更新不会破坏状态。手工启动的实例需要先自行停止，更新器不会自动终止它们。独立备份方法见[操作手册](operations.md)。
+
+## 卸载
+
+运行相同安装命令，选择“卸载”。默认保留配置、证书、数据库和日志，停止服务后移除程序、服务定义及命令链接。以后重新安装到相同目录可继续使用这些数据。永久删除数据需选择不保留，输入 `DELETE` 并单独确认卸载。请事先备份；删除后无法通过安装器恢复。
 
 ## 离线备份与恢复
 
@@ -165,4 +166,4 @@ sudo ./ovpn
 
 手工前台运行不需要服务管理器。需要通过 PATH 使用 CLI 时，添加解压根目录，例如 `export PATH="/opt/ovpn:$PATH"`，并保持整个目录完整。支持绝对路径、符号链接、不同工作目录和含空格的路径。`sudo` 可能重置 PATH，此时请使用程序绝对路径或安装器创建的 `/usr/local/bin/ovpn` 链接。
 
-初始化前可直接移动目录。已初始化的实例需要先停止，再移动完整目录，然后执行 `sudo /new/path/ovpn repair apply --yes`，重建含绝对路径的派生文件后再启动。仍指向旧位置的服务定义和命令链接也需要更新。安装器管理的更新器使用原先注册的目录和服务；手工移动后需要先同步调整这些路径。
+初始化前可直接移动目录。已初始化的实例需要先停止，再移动完整目录，然后执行 `sudo /new/path/ovpn repair apply --yes`，重建含绝对路径的派生文件后再启动。仍指向旧位置的服务定义和命令链接也需要更新。安装器管理的更新操作使用原先注册的目录和服务；手工移动后需要先同步调整这些路径。

@@ -35,26 +35,11 @@ GHCR 数字 tag 对应项目版本，Docker Hub 数字 tag 对应内置 OpenVPN 
 
 ```bash
 sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
-sudo cp /opt/ovpn/config/config.example.yaml /opt/ovpn/config/config.yaml
-sudo /opt/ovpn/bin/nano /opt/ovpn/config/config.yaml
 ```
 
-脚本自动选择最新稳定 Release，安装到 `/opt/ovpn` 并注册服务，但不会自动启动。请先将 `server.endpoint` 改为公网域名或 IP，并选择不重叠的 `ipv4.network`。
+先选择语言（默认英文），再选择安装、更新或卸载（默认安装）。按提示填写公网域名或 IP；目录、版本、端口等均可直接回车使用默认值。配置确认后一次性写入，并询问是否启动服务和设置开机启动。中途按 Ctrl-C，重新运行并选择相同操作即可从未完成的步骤继续。
 
-systemd：
-
-```bash
-sudo systemctl enable --now ovpn
-```
-
-OpenRC：
-
-```bash
-sudo rc-update add ovpn default
-sudo rc-service ovpn start
-```
-
-请在宿主及云防火墙放行 VPN 端口。指定目录、选择版本、在线更新、API 配置和备份方法见 [Linux 裸机指南](docs/cn/v4/native-linux.md)。
+请在宿主及云防火墙放行 VPN 端口。更新、卸载也使用同一条命令，卸载默认保留配置与数据。详见 [Linux 裸机指南](docs/cn/v4/native-linux.md)。
 
 ### Docker
 

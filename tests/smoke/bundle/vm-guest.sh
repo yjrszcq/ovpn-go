@@ -34,12 +34,20 @@ for _ in $(seq 1 30); do
   if curl -fsS http://127.0.0.1:18080/SHA256SUMS >/dev/null; then break; fi
   sleep 1
 done
+python3 /fixtures/installer-interactive.py
+run_installer() {
+  local installer=(bash /fixtures/install.sh --non-interactive --action "${OVPN_INSTALL_ACTION:-install}"
+    --directory "${OVPN_INSTALL_DIR:-/opt/ovpn}" --version "${OVPN_VERSION:-latest}"
+    --download-base-url "${OVPN_DOWNLOAD_BASE_URL:-http://127.0.0.1:18080}"
+    --command-link "${OVPN_COMMAND_LINK:-/usr/local/bin/ovpn}")
+  if [ "${1:-}" = --exec ]; then exec "${installer[@]}"; else "${installer[@]}"; fi
+}
 export OVPN_DOWNLOAD_BASE_URL=http://127.0.0.1:18080
 export OVPN_VERSION
 export OVPN_INSTALL_DIR
 OVPN_INSTALL_DIR="$(cat /fixtures/install-dir)"
 for scenario in corrupt missing unsafe wrong-arch wrong-schema unlisted; do
-  if OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_DIR=/opt/ovpn-negative OVPN_COMMAND_LINK=/usr/local/bin/ovpn-negative OVPN_DOWNLOAD_BASE_URL="http://127.0.0.1:18080/$scenario" bash /fixtures/install.sh >/run/negative.log 2>&1; then
+  if OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_DIR=/opt/ovpn-negative OVPN_COMMAND_LINK=/usr/local/bin/ovpn-negative OVPN_DOWNLOAD_BASE_URL="http://127.0.0.1:18080/$scenario" run_installer >/run/negative.log 2>&1; then
     echo "invalid asset accepted: $scenario"
     exit 1
   fi
@@ -51,18 +59,18 @@ done
 OVPN_VERSION="$(cat /fixtures/old-version)"
 if [ -d /run/systemd/system ]; then unit=/etc/systemd/system/ovpn.service; else unit=/etc/init.d/ovpn; fi
 ln -s /nonexistent/ovpn-foreign "$unit"
-if bash /fixtures/install.sh >/run/unit-conflict.log 2>&1; then exit 1; fi
+if run_installer >/run/unit-conflict.log 2>&1; then exit 1; fi
 grep -Fq 'must not be replaced' /run/unit-conflict.log
 test -L "$unit"
 test ! -e "$OVPN_INSTALL_DIR"
 rm "$unit"
-bash /fixtures/install.sh
+run_installer
 test -L /usr/local/bin/ovpn
 if [ "$OVPN_INSTALL_DIR" != /opt/ovpn ]; then
   ln -s "$OVPN_INSTALL_DIR" /opt/ovpn
   ln -s "$OVPN_INSTALL_DIR.install-lock" /opt/ovpn.install-lock
 fi
-bash /fixtures/install.sh
+run_installer
 cp /opt/ovpn/config/config.example.yaml /opt/ovpn/config/config.yaml
 sed -i 's/vpn.example.com/127.0.0.1/' /opt/ovpn/config/config.yaml
 service_action() {
@@ -82,7 +90,7 @@ else
 fi
 # Existing command conflicts must leave both the command and target intact.
 printf 'existing command\n' >/usr/local/bin/ovpn-conflict
-if OVPN_INSTALL_DIR=/opt/ovpn-conflict OVPN_COMMAND_LINK=/usr/local/bin/ovpn-conflict bash /fixtures/install.sh >/run/conflict.log 2>&1; then exit 1; fi
+if OVPN_INSTALL_DIR=/opt/ovpn-conflict OVPN_COMMAND_LINK=/usr/local/bin/ovpn-conflict run_installer >/run/conflict.log 2>&1; then exit 1; fi
 grep -Fq 'existing command' /usr/local/bin/ovpn-conflict
 test ! -e /opt/ovpn-conflict
 if [ -d /run/systemd/system ]; then systemctl enable ovpn; else rc-update add ovpn default; fi
@@ -97,7 +105,7 @@ certificate="$(sha256sum /opt/ovpn/data/pki/ca.crt)"
 chmod 640 /opt/ovpn/config/vm-client.ovpn
 profile="$(sha256sum /opt/ovpn/config/vm-client.ovpn)"
 service_action stop
-OVPN_VERSION="$(cat /fixtures/middle-version)" OVPN_INSTALL_ACTION=update bash /fixtures/install.sh
+OVPN_VERSION="$(cat /fixtures/middle-version)" OVPN_INSTALL_ACTION=update run_installer
 if service_action status; then
   echo 'stopped upgrade unexpectedly started service'
   exit 1
@@ -111,11 +119,11 @@ done
 # The lock must reject another live updater without stopping the service.
 exec 9<>/opt/ovpn.install-lock
 /opt/ovpn/bin/flock -n 9
-if OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update bash /fixtures/install.sh >/run/concurrent.log 2>&1; then exit 1; fi
+if OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update run_installer >/run/concurrent.log 2>&1; then exit 1; fi
 grep -Fq 'another installation/update is active' /run/concurrent.log
 exec 9>&-
 ovpn runtime health
-OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update bash /fixtures/install.sh
+OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update run_installer
 ovpn runtime health
 test "$(sha256sum /opt/ovpn/data/pki/ca.crt)" = "$certificate"
 test "$(sha256sum /opt/ovpn/config/vm-client.ovpn)" = "$profile"
@@ -129,14 +137,14 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 ovpn runtime health
-if OVPN_VERSION="$(cat /fixtures/bad-version)" OVPN_DOWNLOAD_BASE_URL=http://127.0.0.1:18080/bad OVPN_INSTALL_ACTION=update bash /fixtures/install.sh >/run/unmanaged-update.log 2>&1; then exit 1; fi
+if OVPN_VERSION="$(cat /fixtures/bad-version)" OVPN_DOWNLOAD_BASE_URL=http://127.0.0.1:18080/bad OVPN_INSTALL_ACTION=update run_installer >/run/unmanaged-update.log 2>&1; then exit 1; fi
 grep -Fq 'unmanaged instance detected' /run/unmanaged-update.log
 ovpn runtime health
 kill -TERM "$unmanaged"
 wait "$unmanaged"
 service_action start
 # A deliberately broken, checksum-valid candidate must trigger real rollback.
-if OVPN_VERSION="$(cat /fixtures/bad-version)" OVPN_DOWNLOAD_BASE_URL=http://127.0.0.1:18080/bad OVPN_INSTALL_ACTION=update bash /fixtures/install.sh; then
+if OVPN_VERSION="$(cat /fixtures/bad-version)" OVPN_DOWNLOAD_BASE_URL=http://127.0.0.1:18080/bad OVPN_INSTALL_ACTION=update run_installer; then
   echo 'broken update unexpectedly succeeded' >&2
   exit 1
 fi
@@ -144,7 +152,7 @@ ovpn runtime health
 test "$(ovpn version --short)" = "$(cat /fixtures/new-version)"
 test "$(sha256sum /opt/ovpn/data/pki/ca.crt)" = "$certificate"
 # Kill a real updater after replacement, before its failing health check ends.
-OVPN_VERSION="$(cat /fixtures/bad-version)" OVPN_DOWNLOAD_BASE_URL=http://127.0.0.1:18080/bad OVPN_INSTALL_ACTION=update bash /fixtures/install.sh >/run/interrupted.log 2>&1 &
+OVPN_VERSION="$(cat /fixtures/bad-version)" OVPN_DOWNLOAD_BASE_URL=http://127.0.0.1:18080/bad OVPN_INSTALL_ACTION=update run_installer --exec >/run/interrupted.log 2>&1 &
 updater=$!
 for _ in $(seq 1 30); do
   if [ -f /opt/ovpn/.update-backup/ready ] && [ "$(ovpn version --short)" = "$(cat /fixtures/bad-version)" ]; then break; fi
@@ -153,12 +161,12 @@ done
 test -f /opt/ovpn/.update-backup/ready
 kill -KILL "$updater"
 wait "$updater" || true
-OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update bash /fixtures/install.sh
+OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update run_installer
 ovpn runtime health
 test "$(sha256sum /opt/ovpn/data/pki/ca.crt)" = "$certificate"
 test ! -e /opt/ovpn/.update-backup
 service_action stop
-OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update bash /fixtures/install.sh
+OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update run_installer
 if service_action status; then
   echo 'stopped service unexpectedly started' >&2
   exit 1

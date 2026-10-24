@@ -35,26 +35,11 @@ Requires Linux TUN support, root/network administration privileges, Bash, curl, 
 
 ```bash
 sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
-sudo cp /opt/ovpn/config/config.example.yaml /opt/ovpn/config/config.yaml
-sudo /opt/ovpn/bin/nano /opt/ovpn/config/config.yaml
 ```
 
-The script selects the latest stable Release, installs to `/opt/ovpn` and registers a service without starting it. Set `server.endpoint` to your public hostname/IP and choose a non-overlapping `ipv4.network` before starting.
+Choose a language (English by default), then Install, Update or Uninstall (Install by default). Enter your public hostname/IP; press Enter to accept defaults for the directory, version, port and other settings. Configuration is written once after confirmation; you then choose whether to start the service and enable it at boot. After Ctrl-C, rerun and select the same action to resume at the unfinished step.
 
-For systemd:
-
-```bash
-sudo systemctl enable --now ovpn
-```
-
-For OpenRC:
-
-```bash
-sudo rc-update add ovpn default
-sudo rc-service ovpn start
-```
-
-Keep the VPN port accessible through host/cloud firewalls. For custom directories, version selection, online updates, API setup and backups, see the [native Linux guide](docs/en/v4/native-linux.md).
+Allow the VPN port through host/cloud firewalls. Use the same command for updates and uninstalling; uninstall keeps configuration and data by default. See the [native Linux guide](docs/en/v4/native-linux.md).
 
 ### Docker
 

@@ -14,20 +14,17 @@ Wait until the Release page contains both architecture archives and `SHA256SUMS`
 sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
 ```
 
-The installer selects the latest stable Release and the host architecture, verifies the archive, installs to `/opt/ovpn`, creates `/usr/local/bin/ovpn`, and registers a systemd or OpenRC service. It leaves the service stopped and disabled. Existing unrelated commands, directories and service definitions are refused.
+The installer first asks for a language (English by default), then Install, Update or Uninstall (Install by default). The default directory is `/opt/ovpn` and the default version is the latest stable Release. Press Enter to accept displayed defaults. Your public hostname/IP is required. Further prompts cover the VPN network, transport, port, NAT, DNS and optional advanced settings.
 
-To choose a directory and a published version, replace `vX.Y.Z`:
+It detects the host architecture, verifies the archive, creates `/usr/local/bin/ovpn` and registers a systemd or OpenRC service. Configuration is validated and written once after confirmation. It then asks whether to enable boot startup and start now (both default to yes). Unrelated existing commands, directories and service definitions are refused. One managed service is supported per host.
 
-```bash
-sudo env OVPN_INSTALL_DIR=/opt/vpn OVPN_VERSION=vX.Y.Z bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
-```
-
-Use the same `OVPN_INSTALL_DIR` for subsequent updates. One managed `ovpn` service is supported per host.
+Ctrl-C interrupts setup. Rerun and select the same action to retain completed answers and resume at the unfinished question. Incomplete configuration is never activated; reinstalling retains existing configuration. Installation and update settings are selected interactively without environment variables. Choose a non-overlapping network and allow the VPN port through host/cloud firewalls.
 
 ## Configure and start
 
+Interactive installation already handles configuration and startup choices. Use these commands for later manual edits, startup, or after choosing not to start during installation.
+
 ```bash
-sudo cp /opt/ovpn/config/config.example.yaml /opt/ovpn/config/config.yaml
 sudo /opt/ovpn/bin/nano /opt/ovpn/config/config.yaml
 ```
 
@@ -111,14 +108,18 @@ sudo env OVPN_MAINTENANCE=true /opt/ovpn/ovpn migrate plan
 ## Update and recover
 
 ```bash
-sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/update.sh')"
+sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/scripts/install.sh')"
 ```
 
-The updater downloads and verifies first, then locks the installation. A running service is stopped, snapshotted, updated and restarted with a health check; a stopped service stays stopped. Your configuration, certificates, database, profiles, logs, permissions and service enablement are retained. A failed replacement or health check restores the previous program and snapshot. After an interrupted update, rerun the updater to recover the transaction. A retained `.update-backup/` means recovery needs attention; preserve it until the instance is healthy.
+Rerun the script and select Update. The updater downloads and verifies first, then locks the installation. A running service is stopped, snapshotted, updated and restarted with a health check; a stopped service stays stopped. Your configuration, certificates, database, profiles, logs, permissions and service enablement are retained. A failed replacement or health check restores the previous program and snapshot. After an interrupted update, rerun the updater to recover the transaction. A retained `.update-backup/` means recovery needs attention; preserve it until the instance is healthy.
 
-For a custom installation, pass the same `OVPN_INSTALL_DIR` to the updater; set `OVPN_VERSION=vX.Y.Z` to select a published version.
+Confirm the installation directory and select the latest stable release or enter a published version in the prompts.
 
 Updates require the same data schema and refuse downgrades. Repeating installation or updating to the installed version preserves state. Stop manually launched instances before updating; the updater refuses to terminate them. Keep independent backups as described in the [operations guide](operations.md).
+
+## Uninstall
+
+Run the same installer command and select Uninstall. By default, configuration, certificates, database and logs are retained. The service is stopped and the program, service definition and command link are removed. Reinstalling in the same directory reuses retained data. Permanent deletion requires choosing not to keep data, typing `DELETE` and separately confirming uninstall. Back up first; deleted data cannot be recovered by the installer.
 
 ## Offline backup and restore
 

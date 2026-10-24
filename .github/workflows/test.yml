@@ -58,7 +58,6 @@ jobs:
             scripts/docker-build.sh \
             scripts/build-bundle.sh \
             scripts/install.sh \
-            scripts/update.sh \
             tests/smoke/bundle/*.sh \
             scripts/fetch-openvpn-source.sh \
             scripts/go-tool.sh \
@@ -90,7 +89,6 @@ jobs:
             scripts/docker-build.sh \
             scripts/build-bundle.sh \
             scripts/install.sh \
-            scripts/update.sh \
             tests/smoke/bundle/*.sh \
             scripts/fetch-openvpn-source.sh \
             scripts/go-tool.sh \

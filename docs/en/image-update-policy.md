@@ -33,7 +33,7 @@ Releases sharing a data schema interpret that schema identically. Back up data a
 
 For Docker, stop the service, select the new image for both live and maintenance services, pull it, run read-only `state doctor`, and recreate the live service. Keep existing volumes and verify version, state and runtime health; see the [operations guide](v4/operations.md#image-update-without-a-schema-change).
 
-For installer-managed native deployments, use the [online updater](v4/native-linux.md#update-and-recover). It preserves the original running/stopped state and service enablement, snapshots state after stopping the service, and checks health after restarting. Failed replacement or health checks restore the previous program and snapshot. Rerun the updater to recover an interrupted transaction. Custom installations must pass the same `OVPN_INSTALL_DIR`; managed recovery snapshots cover the installation's `config/`, `data/` and `run/`. Stop manually launched instances before updating.
+For installer-managed native deployments, use the [online updater](v4/native-linux.md#update-and-recover). It preserves the original running/stopped state and service enablement, snapshots state after stopping the service, and checks health after restarting. Failed replacement or health checks restore the previous program and snapshot. Rerun the updater to recover an interrupted transaction. Select Update and confirm the installation directory in the same installation script; managed recovery snapshots cover the installation's `config/`, `data/` and `run/`. Stop manually launched instances before updating.
 
 The native updater accepts compatible schemas only and refuses downgrades. It is not a Docker-to-native conversion tool.
 

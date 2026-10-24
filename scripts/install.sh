@@ -1,16 +1,140 @@
 #!/usr/bin/env bash
-# Online installer/updater; safe to execute using bash -c "$(curl -fsSL URL)".
+# Standalone bilingual installer; safe to execute with bash -c "$(curl -fsSL URL)".
 set -euo pipefail
 umask 077
+language=en
+action=install
+interactive=1
+root=''
+version=latest
+base=''
+link=/usr/local/bin/ovpn
+state=''
+install_locked=0
+transaction=0
+new_install=0
+new_service=0
+was_running=0
+wizard_starting=0
+work="$(mktemp -d)"
+trap 'rm -rf -- "$work"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+staging=''
+candidate=''
+say() { if [ "$language" = zh ]; then printf '%s\n' "$2"; else printf '%s\n' "$1"; fi; }
 fail() {
-  printf 'ovpn: %s\n' "$*" >&2
+  say "ovpn: $*" "ovpn：操作失败：$*" >&2
   exit 1
 }
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+  --non-interactive)
+    interactive=0
+    shift
+    ;;
+  --action | --directory | --version | --download-base-url | --command-link)
+    [ "$#" -ge 2 ] || fail "missing value: $1"
+    case "$1" in
+    --action) action="$2" ;;
+    --directory) root="$2" ;;
+    --version) version="$2" ;;
+    --download-base-url) base="$2" ;;
+    --command-link) link="$2" ;;
+    esac
+    shift 2
+    ;;
+  *) fail "unknown argument: $1" ;;
+  esac
+done
 [ "$(id -u)" = 0 ] || fail 'installation requires root'
-for tool in curl tar sha256sum awk sed grep mktemp readlink seq find; do command -v "$tool" >/dev/null || fail "missing prerequisite: $tool"; done
-action="${OVPN_INSTALL_ACTION:-install}"
-case "$action" in install | update) ;; *) fail 'invalid install action' ;; esac
-root="${OVPN_INSTALL_DIR:-/opt/ovpn}"
+if [ "$interactive" = 1 ] && [ ! -t 0 ]; then fail 'an interactive terminal is required (automation must explicitly use --non-interactive)'; fi
+read_value() {
+  local label="$1" default="$2"
+  printf '%s' "$label"
+  if [ -n "$default" ]; then printf ' [%s]' "$default"; fi
+  printf ': '
+  IFS= read -r REPLY || {
+    say 'Input interrupted; run the installer again to resume.' '输入中断；重新运行安装脚本即可继续。'
+    exit 130
+  }
+  REPLY="${REPLY:-$default}"
+}
+if [ "$interactive" = 1 ]; then
+  while true; do
+    read_value 'Language / 语言: 1) English  2) 中文' 1
+    case "$REPLY" in 1 | en | English)
+      language=en
+      break
+      ;;
+    2 | zh | 中文)
+      language=zh
+      break
+      ;;
+    esac
+  done
+  while true; do
+    read_value "$(say 'Action: 1) Install  2) Update  3) Uninstall' '操作：1) 安装  2) 更新  3) 卸载')" 1
+    case "$REPLY" in 1 | install)
+      action=install
+      break
+      ;;
+    2 | update)
+      action=update
+      break
+      ;;
+    3 | uninstall)
+      action=uninstall
+      break
+      ;;
+    esac
+  done
+fi
+case "$action" in install | update | uninstall) ;; *) fail 'invalid action' ;; esac
+for tool in tar sha256sum awk sed grep readlink seq find stat ln; do command -v "$tool" >/dev/null || fail "missing prerequisite: $tool"; done
+if [ "$action" != uninstall ]; then command -v curl >/dev/null || fail 'missing prerequisite: curl'; fi
+record() {
+  local key="$1" value="$2" temporary
+  [ -n "$state" ] || return 0
+  temporary="$(mktemp "$state/.answer.XXXXXX")"
+  printf '%s\n' "$value" >"$temporary"
+  if ! ln "$temporary" "$state/$key" 2>/dev/null; then
+    [[ -f "$state/$key" && ! -L "$state/$key" && "$(cat "$state/$key")" = "$value" ]] || fail 'setup progress changed concurrently; rerun to resume'
+  fi
+  rm -f -- "$temporary"
+}
+saved() {
+  [ -n "$state" ] && [ -f "$state/$1" ] && [ ! -L "$state/$1" ]
+}
+finish_progress() {
+  if [ -n "$state" ]; then rm -rf -- "$state"; fi
+}
+if [ "$interactive" = 1 ]; then
+  for directory in /var/lib/ovpn-go /var/lib/ovpn-go/installer "/var/lib/ovpn-go/installer/$action"; do
+    [ ! -L "$directory" ] || fail 'unsafe setup progress directory'
+    mkdir -p "$directory"
+    [ "$(stat -c %u "$directory")" = 0 ] || fail 'setup progress must be owned by root'
+    chmod 700 "$directory"
+  done
+  state="/var/lib/ovpn-go/installer/$action"
+  if saved format; then [ "$(cat "$state/format")" = 1 ] || fail 'unsupported setup progress format'; else record format 1; fi
+fi
+if [ -z "$root" ]; then
+  root=/opt/ovpn
+  if [ -L "$link" ]; then
+    existing="$(readlink -f "$link" || true)"
+    if [ -n "$existing" ] && [ -f "${existing%/*}/.ovpn-install" ]; then root="${existing%/*}"; fi
+  fi
+fi
+if [ "$interactive" = 1 ]; then
+  if saved directory; then
+    root="$(cat "$state/directory")"
+    say "Resuming $action in $root; completed answers are retained." "继续 $root 的 $action 操作；已完成的答案会保留。"
+  else
+    read_value "$(say 'Installation directory' '安装目录')" "$root"
+    root="$REPLY"
+  fi
+fi
 case "$root" in /*) ;; *) fail 'installation directory must be absolute' ;; esac
 case "$root" in / | /opt | /usr | /usr/local | /usr/local/bin | *$'\n'* | *$'\r'* | *'"'* | *'%'* | *\\* | *'$'* | *'`'* | *'/../'* | *'/./'* | */.. | */.) fail 'unsafe installation directory' ;; esac
 root="${root%/}"
@@ -18,7 +142,7 @@ root="${root%/}"
 parent="$(dirname "$root")"
 mkdir -p "$parent"
 root="$(cd "$parent" && pwd -P)/$(basename "$root")"
-link="${OVPN_COMMAND_LINK:-/usr/local/bin/ovpn}"
+record directory "$root"
 [ "$link" != "$root/ovpn" ] || fail 'command link must be outside the installation'
 if [ -e "$link" ] || [ -L "$link" ]; then
   if [ ! -L "$link" ] || [ "$(readlink "$link")" != "$root/ovpn" ]; then fail "refusing to replace existing command: $link"; fi
@@ -28,31 +152,12 @@ if command -v systemctl >/dev/null && [ -d /run/systemd/system ]; then
   manager=systemd
 elif command -v rc-service >/dev/null && [ -d /run/openrc ]; then
   manager=openrc
-else
-  fail 'no running systemd/OpenRC found; extract the archive manually for foreground use'
-fi
-case "$(uname -m)" in x86_64) architecture=amd64 ;; aarch64 | arm64) architecture=arm64 ;; *) fail 'unsupported CPU architecture' ;; esac
-version="${OVPN_VERSION:-}"
-repository='yjrszcq/ovpn-go'
-if [ -z "$version" ]; then
-  location="$(curl --fail --silent --show-error --location --retry 3 --output /dev/null --write-out '%{url_effective}' "https://github.com/$repository/releases/latest")"
-  version="${location##*/}"
-fi
-version="${version#v}"
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'invalid release version'
-archive="openvpn-server-$version-linux-$architecture.tar.gz"
-base="${OVPN_DOWNLOAD_BASE_URL:-https://github.com/$repository/releases/download/v$version}"
-work="$(mktemp -d)"
-staging=''
-transaction=0
-new_install=0
-new_service=0
-was_running=0
+else fail 'no running systemd/OpenRC found; use manual foreground deployment'; fi
 journal="$root/.update-backup"
+lockfile="$root.install-lock"
+if [ "$manager" = systemd ]; then unit=/etc/systemd/system/ovpn.service; else unit=/etc/init.d/ovpn; fi
 service() {
-  if [ "$manager" = systemd ]; then
-    systemctl "$1" ovpn.service
-  else rc-service ovpn "$1"; fi
+  if [ "$manager" = systemd ]; then systemctl "$1" ovpn.service; else rc-service ovpn "$1"; fi
 }
 healthy() {
   local _
@@ -61,6 +166,17 @@ healthy() {
     sleep 1
   done
   return 1
+}
+acquire_lock() {
+  [ "$install_locked" = 0 ] || return 0
+  if [ ! -e "$lockfile" ] && [ ! -L "$lockfile" ]; then (
+    set -C
+    : >"$lockfile"
+  ) || fail 'installation lock creation raced another process; retry'; fi
+  [[ -f "$lockfile" && ! -L "$lockfile" ]] || fail 'unsafe installation lock'
+  exec 9<>"$lockfile"
+  "$1" -n 9 || fail 'another installation/update is active'
+  install_locked=1
 }
 rollback() {
   [ -d "$journal" ] || return 0
@@ -85,6 +201,9 @@ rollback() {
 cleanup() {
   status=$?
   trap - EXIT INT TERM HUP
+  if [ "$wizard_starting" = 1 ]; then service stop >/dev/null 2>&1 || true; fi
+  if [ "$status" = 130 ] && [ -n "$state" ]; then say 'Interrupted; rerun and select the same action to resume.' '操作中断；重新运行并选择相同操作即可继续。'; fi
+  if [ -n "$candidate" ]; then rm -f -- "$candidate"; fi
   exec 8>&-
   if [ "$transaction" = 1 ]; then rollback || status=1; fi
   if [ "$status" != 0 ] && [ "$new_install" = 1 ]; then
@@ -105,6 +224,256 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
+# Answers are saved separately from the active YAML. Never evaluate saved input.
+answer() {
+  local key="$1" en="$2" zh="$3" default="$4" kind="${5:-text}"
+  if saved "$key"; then
+    REPLY="$(cat "$state/$key")"
+    return
+  fi
+  while true; do
+    local displayed_default="$default"
+    if [ "$kind" = bool ]; then
+      if [ "$default" = true ]; then displayed_default=yes; else displayed_default=no; fi
+    fi
+    read_value "$(say "$en" "$zh")" "$displayed_default"
+    case "$kind" in
+    bool) case "${REPLY,,}" in y | yes | true | 1 | 是) REPLY=true ;; n | no | false | 0 | 否) REPLY=false ;; *)
+      say 'Enter yes or no.' '请输入 yes 或 no。'
+      continue
+      ;;
+    esac ;;
+    version) [[ "$REPLY" = latest || "$REPLY" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue ;;
+    required) [ -n "$REPLY" ] || {
+      say 'A value is required.' '此项不能为空。'
+      continue
+    } ;;
+    esac
+    [[ "$REPLY" != *$'\r'* && "$REPLY" != *$'\n'* ]] || continue
+    return
+  done
+}
+quote_yaml() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '"%s"' "$value"
+}
+render_config() {
+  local item
+  printf 'version: 1\nserver:\n  endpoint: '
+  quote_yaml "$endpoint"
+  printf '\n  transport:\n    protocol: '
+  quote_yaml "$protocol"
+  printf '\n    family: '
+  quote_yaml "$family"
+  printf '\n    port: %s\n  clientToClient: %s\nipv4:\n  network: ' "$port" "$client_to_client"
+  quote_yaml "$network"
+  if [ "$pool" != auto ]; then printf '\n  dynamicPoolSize: %s' "$pool"; fi
+  printf '\n  nat:\n    enabled: %s\n    interface: ' "$nat"
+  quote_yaml "$interface"
+  printf '\n  redirectGateway: %s\n  dns: [' "$redirect"
+  local separator=''
+  if [ "$dns" != none ]; then
+    IFS=, read -ra items <<<"$dns"
+    for item in "${items[@]}"; do
+      printf '%s' "$separator"
+      quote_yaml "$item"
+      separator=', '
+    done
+  fi
+  printf ']\n  routes: ['
+  separator=''
+  if [ "$routes" != none ]; then
+    IFS=, read -ra items <<<"$routes"
+    for item in "${items[@]}"; do
+      printf '%s' "$separator"
+      quote_yaml "$item"
+      separator=', '
+    done
+  fi
+  printf ']\nlogging:\n  maxBytes: %s\n  backups: %s\n' "$log_bytes" "$log_backups"
+}
+config_answer() {
+  local key="$1" en="$2" zh="$3" default="$4" kind="${5:-text}" value
+  if saved "$key"; then
+    printf -v "$key" '%s' "$(cat "$state/$key")"
+    return
+  fi
+  while true; do
+    answer "$key" "$en" "$zh" "$default" "$kind"
+    value="$REPLY"
+    case "$key" in port | log_bytes | log_backups) [[ "$value" =~ ^[0-9]+$ ]] || continue ;; pool) [[ "$value" = auto || "$value" =~ ^[0-9]+$ ]] || continue ;; esac
+    printf -v "$key" '%s' "$value"
+    render_config >"$work/candidate.yaml"
+    if OVPN_CONFIG_FILE="$work/candidate.yaml" "$root/ovpn" config validate >"$work/validation" 2>&1; then
+      record "$key" "$value"
+      return
+    fi
+    cat "$work/validation" >&2
+    say 'Please correct this value.' '请修改此项。'
+    printf -v "$key" '%s' "$default"
+  done
+}
+setup() {
+  [ "$interactive" = 1 ] || return 0
+  # Keep the installed runtime when configuration is interrupted.
+  new_install=0
+  new_service=0
+  local endpoint=vpn.example.com protocol=udp family=auto port=1194 client_to_client=true
+  local network=10.42.0.0/24 pool=auto nat=false interface=auto redirect=false dns=none routes=none log_bytes=10485760 log_backups=5
+  local advanced start_now enable_boot
+  if [ ! -e "$root/config/config.yaml" ] || saved confirmed; then
+    config_answer endpoint 'Public hostname or IP (required)' '公网域名或 IP（必填）' '' required
+    config_answer network 'VPN IPv4 network' 'VPN IPv4 网段' 10.42.0.0/24
+    config_answer protocol 'Transport protocol (udp/tcp)' '传输协议（udp/tcp）' udp
+    config_answer port 'VPN port' 'VPN 端口' 1194
+    config_answer nat 'Enable NAT (yes/no)' '启用 NAT（yes/no）' false bool
+    config_answer redirect 'Route client Internet traffic through VPN (yes/no)' '客户端互联网流量经过 VPN（yes/no）' false bool
+    config_answer dns 'DNS servers (comma-separated IPv4, or none)' 'DNS 服务器（IPv4，逗号分隔，或 none）' none
+    answer advanced 'Advanced settings (yes/no)' '高级设置（yes/no）' false bool
+    advanced="$REPLY"
+    record advanced "$advanced"
+    if [ "$advanced" = true ]; then
+      config_answer family 'Transport family (auto/ipv4/ipv6)' '传输地址族（auto/ipv4/ipv6）' auto
+      config_answer pool 'Dynamic address pool size (auto or number)' '动态地址池大小（auto 或数字）' auto
+      config_answer client_to_client 'Allow client-to-client traffic (yes/no)' '允许客户端互通（yes/no）' true bool
+      config_answer interface 'NAT interface (auto or interface name)' 'NAT 网卡（auto 或网卡名称）' auto
+      config_answer routes 'Pushed routes (comma-separated IPv4 CIDRs, or none)' '推送路由（IPv4 CIDR，逗号分隔，或 none）' none
+      config_answer log_bytes 'Log rotation size in bytes' '日志轮转大小（字节）' 10485760
+      config_answer log_backups 'Log backup count' '日志备份数量' 5
+    fi
+    render_config >"$work/candidate.yaml"
+    OVPN_CONFIG_FILE="$work/candidate.yaml" "$root/ovpn" config validate
+    cat "$work/candidate.yaml"
+    answer confirmed 'Write this configuration (yes/no)' '写入以上配置（yes/no）' true bool
+    [ "$REPLY" = true ] || {
+      say 'Configuration saved as a draft; rerun to continue.' '配置草稿已保存；重新运行即可继续。'
+      exit 0
+    }
+    record confirmed true
+    if [ -e "$root/config/config.yaml" ]; then
+      "$root/bin/cmp" -s "$work/candidate.yaml" "$root/config/config.yaml" || fail 'configuration changed outside the installer; refusing to overwrite it'
+    else
+      candidate="$(mktemp "$root/config/.config.XXXXXX")"
+      cat "$work/candidate.yaml" >"$candidate"
+      ln "$candidate" "$root/config/config.yaml" || fail 'configuration already exists'
+      rm -f "$candidate"
+      candidate=''
+    fi
+  else
+    say 'Existing configuration is retained.' '保留已有配置。'
+  fi
+  answer enable_boot 'Enable service at boot (yes/no)' '开机自动启动（yes/no）' true bool
+  enable_boot="$REPLY"
+  record enable_boot "$enable_boot"
+  answer start_now 'Start service now (yes/no)' '现在启动服务（yes/no）' true bool
+  start_now="$REPLY"
+  record start_now "$start_now"
+  if [ "$enable_boot" = true ]; then
+    if [ "$manager" = systemd ]; then systemctl enable ovpn.service; else rc-update add ovpn default; fi
+  fi
+  if [ "$start_now" = true ]; then
+    if ! service status >/dev/null 2>&1; then
+      wizard_starting=1
+      service start
+    fi
+    healthy || fail 'service failed health checks; configuration is retained; rerun to retry'
+    wizard_starting=0
+  fi
+  say "Installation ready: $root. Use: sudo ovpn runtime health" "安装完成：$root。检查状态：sudo ovpn runtime health"
+}
+uninstall() {
+  [[ -f "$root/.ovpn-install" && ! -L "$root/.ovpn-install" ]] || fail 'not an installer-managed installation'
+  [ "$(cat "$root/.ovpn-install")" = "$manager" ] || fail 'service manager changed'
+  acquire_lock "$root/bin/flock"
+  if [ -L "$unit" ] || ! grep -Fq "\"$root/ovpn\"" "$unit"; then fail 'service definition does not belong to this installation'; fi
+  local keep=true
+  if [ "$interactive" = 1 ]; then
+    answer keep_data 'Keep configuration, certificates, database and logs (yes/no)' '保留配置、证书、数据库和日志（yes/no）' true bool
+    keep="$REPLY"
+    record keep_data "$keep"
+    if [ "$keep" = false ]; then
+      answer delete_data 'Type DELETE to permanently delete instance data' '输入 DELETE 永久删除实例数据' '' required
+      [ "$REPLY" = DELETE ] || fail 'data deletion not confirmed'
+      record delete_data DELETE
+    fi
+    answer uninstall_confirmed 'Uninstall ovpn (yes/no)' '确认卸载 ovpn（yes/no）' false bool
+    [ "$REPLY" = true ] || {
+      say 'Uninstall cancelled.' '已取消卸载。'
+      finish_progress
+      return
+    }
+    record uninstall_confirmed true
+  else fail 'uninstall requires interactive confirmation'; fi
+  if ! service status >/dev/null 2>&1 && "$root/ovpn" runtime status >/dev/null 2>&1; then fail 'unmanaged instance detected; stop it before uninstalling'; fi
+  if [ -d "$journal" ]; then rollback || fail 'interrupted update recovery failed'; fi
+  service stop
+  if [ -f "$root/run/.server.lock" ]; then
+    exec 8<>"$root/run/.server.lock"
+    "$root/bin/flock" -n 8 || fail 'unmanaged instance detected'
+  fi
+  if [ "$manager" = systemd ]; then systemctl disable ovpn.service; else rc-update del ovpn default || true; fi
+  # Complete the short removal section once confirmed; prompts and service stop remain interruptible.
+  trap '' INT TERM HUP
+  rm -f "$unit"
+  if [ "$manager" = systemd ]; then systemctl daemon-reload; fi
+  if [ -L "$link" ] && [ "$(readlink "$link")" = "$root/ovpn" ]; then rm -f "$link"; fi
+  # Preserve an ownership marker for a later installation with retained data.
+  printf '%s\n' "$manager" >"$root/.ovpn-retained"
+  for name in bin runtime ovpn MANIFEST.sha256; do rm -rf -- "${root:?}/$name"; done
+  if [ "$keep" = false ]; then
+    for name in config data logs run; do rm -rf -- "${root:?}/$name"; done
+    rm -f "$root/.ovpn-retained"
+  fi
+  rm -f "$root/.ovpn-install"
+  rmdir "$root" 2>/dev/null || true
+  local pending
+  for pending in /var/lib/ovpn-go/installer/install /var/lib/ovpn-go/installer/update; do
+    if [ ! -L "$pending" ] && [ -f "$pending/directory" ] && [ "$(cat "$pending/directory")" = "$root" ]; then rm -rf -- "$pending"; fi
+  done
+  say "Uninstalled ovpn. Retain data: $keep" "已卸载 ovpn。保留数据：$keep"
+  finish_progress
+}
+if [ "$action" = uninstall ]; then
+  uninstall
+  exit 0
+fi
+# Resume setup without downloading the same package again.
+if [ "$action" = install ] && [ -f "$root/.ovpn-install" ] && [ -x "$root/ovpn" ]; then
+  [ "$(cat "$root/.ovpn-install")" = "$manager" ] || fail 'service manager changed'
+  acquire_lock "$root/bin/flock"
+  if [ -d "$journal" ]; then rollback || fail 'interrupted update recovery failed'; fi
+  setup
+  finish_progress
+  exit 0
+fi
+if [ "$interactive" = 1 ]; then
+  answer version 'Release version (latest or X.Y.Z)' '发布版本（latest 或 X.Y.Z）' latest version
+  version="$REPLY"
+  record version "$version"
+fi
+case "$(uname -m)" in x86_64) architecture=amd64 ;; aarch64 | arm64) architecture=arm64 ;; *) fail 'unsupported CPU architecture' ;; esac
+repository=yjrszcq/ovpn-go
+if saved resolved_version; then version="$(cat "$state/resolved_version")"; fi
+if [ "$version" = latest ]; then
+  location="$(curl --fail --silent --show-error --location --retry 3 --output /dev/null --write-out '%{url_effective}' "https://github.com/$repository/releases/latest")"
+  version="${location##*/}"
+fi
+version="${version#v}"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'invalid release version'
+record resolved_version "$version"
+archive="openvpn-server-$version-linux-$architecture.tar.gz"
+base="${base:-https://github.com/$repository/releases/download/v$version}"
+if [ "$interactive" = 1 ] && [ "$action" = update ]; then
+  say "Target release: $version" "目标版本：$version"
+  answer update_confirmed 'Continue update (yes/no)' '继续更新（yes/no）' true bool
+  [ "$REPLY" = true ] || {
+    finish_progress
+    exit 0
+  }
+  record update_confirmed true
+fi
 curl --fail --silent --show-error --location --retry 3 "$base/$archive" -o "$work/$archive"
 curl --fail --silent --show-error --location --retry 3 "$base/SHA256SUMS" -o "$work/SHA256SUMS"
 checksum="$(awk -v name="$archive" '$2 == name {print $1}' "$work/SHA256SUMS")"
@@ -150,17 +519,13 @@ grep -Fq "\"version\": \"$version\"" "$manifest" || fail 'package version mismat
 grep -Fq "\"architecture\": \"$architecture\"" "$manifest" || fail 'package architecture mismatch'
 grep -Eq '"data_schema": 4([,[:space:]]|$)' "$manifest" || fail 'unsupported data schema'
 [ "$("$package/ovpn" version --short)" = "$version" ] || fail 'packaged executable version mismatch'
-lockfile="$root.install-lock"
-if [ ! -e "$lockfile" ] && [ ! -L "$lockfile" ]; then
-  (
-    set -C
-    : >"$lockfile"
-  ) || fail 'installation lock creation raced another process; retry'
+acquire_lock "$package/bin/flock"
+retained=0
+if [ -e "$root" ] && [ ! -f "$root/.ovpn-install" ] && [ -f "$root/.ovpn-retained" ] && [ ! -L "$root/.ovpn-retained" ]; then
+  [[ "$action" = install && "$(cat "$root/.ovpn-retained")" = "$manager" ]] || fail 'invalid retained installation'
+  retained=1
 fi
-if [ ! -f "$lockfile" ] || [ -L "$lockfile" ]; then fail 'unsafe installation lock'; fi
-exec 9<>"$lockfile"
-"$package/bin/flock" -n 9 || fail 'another installation/update is active'
-if [ -e "$root" ]; then
+if [ -e "$root" ] && [ "$retained" = 0 ]; then
   [ -f "$root/.ovpn-install" ] || fail 'existing directory is not an ovpn installation'
   [ "$(cat "$root/.ovpn-install")" = "$manager" ] || fail 'service manager changed'
   if [ -d "$journal" ]; then rollback || fail 'interrupted update recovery failed'; fi
@@ -172,11 +537,13 @@ if [ -e "$root" ]; then
   IFS=. read -r new_major new_minor new_patch <<<"$version"
   if ((10#$new_major < 10#$old_major || (10#$new_major == 10#$old_major && 10#$new_minor < 10#$old_minor) || (10#$new_major == 10#$old_major && 10#$new_minor == 10#$old_minor && 10#$new_patch < 10#$old_patch))); then fail 'downgrade refused'; fi
   [ "$action" = update ] || {
-    printf 'ovpn is installed; use update.sh\n'
+    setup
+    finish_progress
     exit 0
   }
   if [ "$old_version" = "$version" ]; then
-    printf 'ovpn is already %s\n' "$version"
+    say "ovpn is already $version" "ovpn 已是 $version"
+    finish_progress
     exit 0
   fi
   if service status >/dev/null 2>&1; then
@@ -208,7 +575,7 @@ if [ -e "$root" ]; then
   fi
   transaction=0
   rm -rf -- "$journal"
-  printf 'updated ovpn %s -> %s; original service state restored\n' "$old_version" "$version"
+  say "Updated ovpn $old_version -> $version; original service state restored" "已更新 ovpn $old_version -> $version；已恢复原服务状态"
 else
   [ "$action" = install ] || fail 'no installation to update'
   if [ "$manager" = systemd ]; then
@@ -219,8 +586,16 @@ else
   staging="$(mktemp -d "$parent/.ovpn-install.XXXXXX")"
   cp -a "$package/." "$staging/"
   printf '%s\n' "$manager" >"$staging/.ovpn-install"
-  mv "$staging" "$root"
-  new_install=1
+  if [ "$retained" = 1 ]; then
+    for name in ovpn bin runtime MANIFEST.sha256; do cp -a "$staging/$name" "$root/$name"; done
+    mkdir -p "$root/config" "$root/data" "$root/run"
+    cp -a "$staging/config/config.example.yaml" "$root/config/config.example.yaml"
+    cp "$staging/.ovpn-install" "$root/.ovpn-install"
+    rm -f "$root/.ovpn-retained"
+  else
+    mv "$staging" "$root"
+    new_install=1
+  fi
   mkdir -p "$(dirname "$link")"
   ln -s "$root/ovpn" "$link"
   if [ "$manager" = systemd ]; then
@@ -242,7 +617,6 @@ KillMode=mixed
 WantedBy=multi-user.target
 SERVICE
     systemctl daemon-reload
-    printf 'Configure %s/config/config.yaml, then: systemctl enable --now ovpn\n' "$root"
   else
     if [ -e /etc/init.d/ovpn ] || [ -L /etc/init.d/ovpn ]; then fail 'existing OpenRC ovpn service must not be replaced'; fi
     new_service=1
@@ -275,7 +649,9 @@ status() {
 }
 SERVICE
     chmod 755 /etc/init.d/ovpn
-    printf 'Configure %s/config/config.yaml, then: rc-update add ovpn default; rc-service ovpn start\n' "$root"
   fi
-  printf 'installed ovpn %s at %s; service is not started or enabled\n' "$version" "$root"
+  say "Installed ovpn $version at $root" "已安装 ovpn $version：$root"
+  setup
 fi
+
+finish_progress
