@@ -56,11 +56,11 @@ done
 [ "$dry_run" = 1 ] || [ "$(id -u)" = 0 ] || fail 'installation requires root'
 if [ "$interactive" = 1 ] && [ ! -t 0 ]; then fail 'an interactive terminal is required (automation must explicitly use --non-interactive)'; fi
 read_value() {
-  local label="$1" default="$2"
-  printf '%s' "$label"
-  if [ -n "$default" ]; then printf ' [%s]' "$default"; fi
-  printf ': '
-  IFS= read -r REPLY || {
+  local default="$2" prompt="$1"
+  if [ -n "$default" ]; then prompt+=" [$default]"; fi
+  # Let read print the prompt after entering its interruptible input context.
+  # A separate printf lets an immediate Ctrl-C race with read's signal setup.
+  IFS= read -r -p "$prompt: " REPLY || {
     if [ "$dry_run" = 1 ]; then
       say 'Preview interrupted; answers were discarded.' '试运行中断；答案不会保留。'
     else say 'Input interrupted; run the installer again to resume.' '输入中断；重新运行安装脚本即可继续。'; fi
