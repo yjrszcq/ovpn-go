@@ -35,14 +35,23 @@ func TestControlAcceptsNextApplyAfterSuccessAcknowledgment(t *testing.T) {
 	defer close(ack.release)
 	go server.handle(ctx, ack)
 	_, _ = first.Write([]byte("APPLY\n"))
-	request := <-server.requests
+	var request *applyControlRequest
+	select {
+	case request = <-server.requests:
+	case <-ctx.Done():
+		t.Fatal("supervisor did not accept the first apply")
+	}
 	request.ready <- nil
 	reader := bufio.NewReader(first)
 	if line, err := reader.ReadString('\n'); err != nil || line != "READY\n" {
 		t.Fatalf("ready: %q, %v", line, err)
 	}
 	_, _ = first.Write([]byte("RESUME\n"))
-	<-request.resume
+	select {
+	case <-request.resume:
+	case <-ctx.Done():
+		t.Fatal("supervisor did not receive the resume command")
+	}
 	request.done <- nil
 	if line, err := reader.ReadString('\n'); err != nil || line != "OK\n" {
 		t.Fatalf("resume: %q, %v", line, err)
