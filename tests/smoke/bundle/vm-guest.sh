@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs after systemd/OpenRC boots as PID 1 inside an isolated VM.
-set -euo pipefail
+set -Eeuo pipefail
+trap 'echo "VM assertion failed: ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
 exec > >(tee /dev/console) 2>&1
 finish() {
   code=$?
@@ -88,6 +89,7 @@ if [ -d /run/systemd/system ]; then
 else
   test ! -e /etc/runlevels/default/ovpn
 fi
+. /fixtures/service-entrypoint.sh
 # Existing command conflicts must leave both the command and target intact.
 printf 'existing command\n' >/usr/local/bin/ovpn-conflict
 if OVPN_INSTALL_DIR=/opt/ovpn-conflict OVPN_COMMAND_LINK=/usr/local/bin/ovpn-conflict run_installer >/run/conflict.log 2>&1; then exit 1; fi
@@ -105,12 +107,14 @@ certificate="$(sha256sum /opt/ovpn/data/pki/ca.crt)"
 chmod 640 /opt/ovpn/config/vm-client.ovpn
 profile="$(sha256sum /opt/ovpn/config/vm-client.ovpn)"
 service_action stop
+legacy_unit
 OVPN_VERSION="$(cat /fixtures/middle-version)" OVPN_INSTALL_ACTION=update run_installer
 if service_action status; then
   echo 'stopped upgrade unexpectedly started service'
   exit 1
 fi
 test "$(ovpn version --short)" = "$(cat /fixtures/middle-version)"
+cmp /run/installer-service "$unit"
 service_action start
 for _ in $(seq 1 60); do
   if ovpn runtime health; then break; fi
@@ -123,6 +127,7 @@ if OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update run_in
 grep -Fq 'another installation/update is active' /run/concurrent.log
 exec 9>&-
 ovpn runtime health
+legacy_unit
 OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update run_installer
 ovpn runtime health
 test "$(sha256sum /opt/ovpn/data/pki/ca.crt)" = "$certificate"
@@ -130,7 +135,7 @@ test "$(sha256sum /opt/ovpn/config/vm-client.ovpn)" = "$profile"
 test "$(stat -c %a /opt/ovpn/config/vm-client.ovpn)" = 640
 test "$(ovpn version --short)" = "$(cat /fixtures/new-version)"
 service_action stop
-ovpn >/run/unmanaged.log 2>&1 &
+ovpn server run >/run/unmanaged.log 2>&1 &
 unmanaged=$!
 for _ in $(seq 1 60); do
   if ovpn runtime health; then break; fi
@@ -143,6 +148,7 @@ ovpn runtime health
 kill -TERM "$unmanaged"
 wait "$unmanaged"
 service_action start
+cp -a "$unit" /run/pre-rollback-service
 # A deliberately broken, checksum-valid candidate must trigger real rollback.
 if OVPN_VERSION="$(cat /fixtures/bad-version)" OVPN_DOWNLOAD_BASE_URL=http://127.0.0.1:18080/bad OVPN_INSTALL_ACTION=update run_installer; then
   echo 'broken update unexpectedly succeeded' >&2
@@ -165,6 +171,7 @@ OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update run_insta
 ovpn runtime health
 test "$(sha256sum /opt/ovpn/data/pki/ca.crt)" = "$certificate"
 test ! -e /opt/ovpn/.update-backup
+cmp /run/pre-rollback-service "$unit"
 service_action stop
 OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update run_installer
 if service_action status; then

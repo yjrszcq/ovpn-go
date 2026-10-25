@@ -31,7 +31,7 @@ if ovpn runtime health >/dev/null 2>&1; then
   echo 'init started a service'
   exit 1
 fi
-sed -i 's/^  port: 1194$/  port: 1195/' "$root/config/config.yaml"
+sed -i 's/^    port: 1194$/    port: 1195/' "$root/config/config.yaml"
 start() {
   ovpn server run >/tmp/entrypoint.log 2>&1 &
   pid=$!
