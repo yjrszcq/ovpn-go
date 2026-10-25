@@ -1,7 +1,5 @@
 ARG BASE=debian:13-slim
 FROM ${BASE}
-ARG BUILDARCH
-ARG TARGETARCH
 # Imported Arch ARM roots need the official signing keyrings initialized before
 # their first package transaction. Keep verification enabled and use a direct
 # mirror in addition to the upstream geo-redirector.
@@ -11,8 +9,9 @@ RUN if command -v pacman >/dev/null; then \
         sed -i '1iServer = https://mirror.math.princeton.edu/pub/archlinuxarm/$arch/$repo' /etc/pacman.d/mirrorlist; \
       fi; \
     fi
-# User-mode QEMU cannot implement pacman's Landlock/seccomp download sandbox.
-# Native builds retain it; this affects only the disposable guest image build.
+# Docker/BuildKit restrictions and user-mode QEMU can prevent pacman's download
+# sandbox on either architecture. Disable it only for this disposable guest
+# image's package transaction; package signature verification remains enabled.
 RUN if command -v apk >/dev/null; then \
       apk add --no-cache openrc bash curl tar coreutils diffutils kmod python3; \
     elif command -v apt-get >/dev/null; then \
@@ -20,9 +19,7 @@ RUN if command -v apk >/dev/null; then \
     elif command -v dnf >/dev/null; then \
       dnf install -y systemd systemd-udev bash tar diffutils kmod python3 && dnf clean all; \
     else \
-      sandbox=''; \
-      if [ "$BUILDARCH" != "$TARGETARCH" ]; then sandbox=--disable-sandbox; fi; \
-      pacman -Syu --noconfirm $sandbox systemd-sysvcompat bash curl tar coreutils diffutils kmod python3; fi
+      pacman -Syu --noconfirm --disable-sandbox systemd-sysvcompat bash curl tar coreutils diffutils kmod python3; fi
 # Fail while building the guest, before any lengthy VM acceptance, if the
 # distribution does not provide a tool used by the installer or its fixtures.
 RUN for tool in bash curl tar sha256sum awk sed grep readlink seq find stat ln cmp python3 modprobe tee tail; do \
