@@ -125,9 +125,14 @@ done
 ovpn runtime health
 ovpn client create vm-client --ipv4 auto --output /opt/ovpn/config/vm-client.ovpn
 # Exercise OpenVPN's default trusted DNS helper, without raising script-security.
-# The VM resolver is a normal file, unlike Docker's injected bind mount.
+# Use the installed resolver backend, rather than Docker's exported static file,
+# when resolvconf is provided by systemd-resolved (as on Arch Linux ARM).
+if [ -d /run/systemd/system ] && command -v resolvconf >/dev/null && [ "$(basename "$(readlink -f "$(command -v resolvconf)")")" = resolvectl ]; then
+  systemctl start systemd-resolved
+  ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+fi
 cp /etc/resolv.conf /run/resolv-before
-"$OVPN_INSTALL_DIR/bin/openvpn" --config /opt/ovpn/config/vm-client.ovpn --dev tun-dns-probe --dns server 0 address 1.1.1.1 >/run/dns-client.log 2>&1 &
+"$OVPN_INSTALL_DIR/bin/openvpn" --config /opt/ovpn/config/vm-client.ovpn --dev tun-dns-probe --dns server 0 address 192.0.2.53 >/run/dns-client.log 2>&1 &
 dns_client=$!
 for _ in $(seq 1 60); do
   if grep -Fq 'Initialization Sequence Completed' /run/dns-client.log; then break; fi
@@ -137,7 +142,7 @@ if ! grep -Fq 'Initialization Sequence Completed' /run/dns-client.log; then
   cat /run/dns-client.log
   exit 1
 fi
-grep -Fq 'nameserver 1.1.1.1' /etc/resolv.conf
+grep -Fq 'nameserver 192.0.2.53' /etc/resolv.conf
 kill -TERM "$dns_client"
 wait "$dns_client"
 grep -Fq 'dns up command exited with status 0' /run/dns-client.log

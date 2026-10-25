@@ -75,6 +75,9 @@ func Prepare(executable, invoked string, args, environment []string) (Invocation
 	case "busybox":
 		binary = filepath.Join(root, "runtime", "bin", "busybox")
 	case "openvpn-dns-updown":
+		// OpenVPN's script environment may omit PATH. Host resolver tools are
+		// optional integrations; all other utilities still come from the bundle.
+		env["PATH"] = filepath.Join(root, "bin") + ":/usr/sbin:/usr/bin:/sbin:/bin"
 		binary = filepath.Join(root, "runtime", "lib", "ld-musl.so.1")
 		argv = append([]string{binary, "--library-path", filepath.Join(root, "runtime", "lib"), filepath.Join(root, "runtime", "bin", "bash"), filepath.Join(root, "runtime", "share", "openvpn", "dns-updown")}, args...)
 	case "easyrsa":

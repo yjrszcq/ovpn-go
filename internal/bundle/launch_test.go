@@ -97,4 +97,13 @@ func TestOpenVPNUsesRelocatableDNSHelper(t *testing.T) {
 	if inv.Path != filepath.Join(root, "runtime", "lib", "ld-musl.so.1") || inv.Args[3] != filepath.Join(root, "runtime", "bin", "bash") || inv.Args[4] != filepath.Join(root, "runtime", "share", "openvpn", "dns-updown") {
 		t.Fatalf("DNS helper does not use the private interpreter: %+v", inv)
 	}
+	// OpenVPN may omit PATH from its script environment. Resolver integration
+	// still needs the host's resolvectl/resolvconf, with bundled tools first.
+	found := false
+	for _, value := range inv.Env {
+		found = found || value == "PATH="+filepath.Join(root, "bin")+":/usr/sbin:/usr/bin:/sbin:/bin"
+	}
+	if !found {
+		t.Fatal("DNS helper cannot find host resolver tools without inherited PATH")
+	}
 }
