@@ -107,6 +107,30 @@ certificate="$(sha256sum /opt/ovpn/data/pki/ca.crt)"
 chmod 640 /opt/ovpn/config/vm-client.ovpn
 profile="$(sha256sum /opt/ovpn/config/vm-client.ovpn)"
 service_action stop
+# Existing maintenance readers/writers exclude replacement and preserve service state.
+for original_state in stopped running; do
+  if [ "$original_state" = running ]; then
+    service_action start
+    wait_healthy
+  fi
+  for coordination in .ovpn-runtime.lock .ovpn-data.lock; do
+    exec 7<>"/opt/ovpn/data/$coordination"
+    /opt/ovpn/bin/flock -s 7
+    if OVPN_VERSION="$(cat /fixtures/middle-version)" OVPN_INSTALL_ACTION=update run_installer 7>&- >/run/maintenance-update.log 2>&1; then
+      echo 'update overlapped a maintenance lock'
+      exit 1
+    fi
+    grep -Fq 'maintenance is busy' /run/maintenance-update.log
+    if [ -e /opt/ovpn/.update-backup ]; then
+      cat /run/maintenance-update.log
+      exit 1
+    fi
+    test "$(ovpn version --short)" = "$(cat /fixtures/old-version)"
+    if [ "$original_state" = running ]; then wait_healthy; elif service_action status; then exit 1; fi
+    exec 7>&-
+  done
+  if [ "$original_state" = running ]; then service_action stop; fi
+done
 legacy_unit
 OVPN_VERSION="$(cat /fixtures/middle-version)" OVPN_INSTALL_ACTION=update run_installer
 if service_action status; then
@@ -148,6 +172,8 @@ ovpn runtime health
 kill -TERM "$unmanaged"
 wait "$unmanaged"
 service_action start
+lock_paths=(/opt/ovpn/run/.server.lock /opt/ovpn/data/.ovpn-runtime.lock /opt/ovpn/data/.ovpn-data.lock)
+lock_inodes="$(stat -c '%d:%i' "${lock_paths[@]}")"
 printf '\n# rollback sentinel\n' >>"$unit"
 cp -a "$unit" /run/pre-rollback-service
 # A deliberately broken, checksum-valid candidate must trigger real rollback.
@@ -157,6 +183,7 @@ if OVPN_VERSION="$(cat /fixtures/bad-version)" OVPN_DOWNLOAD_BASE_URL=http://127
 fi
 ovpn runtime health
 cmp /run/pre-rollback-service "$unit"
+test "$(stat -c '%d:%i' "${lock_paths[@]}")" = "$lock_inodes"
 cp -a /run/installer-service "$unit"
 reload_unit
 cp -a "$unit" /run/pre-rollback-service
@@ -170,6 +197,8 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 test -f /opt/ovpn/.update-backup/ready
+# Health checking releases maintenance locks to permit the managed service to start.
+# Recovery must reacquire them before restoring, not replace their inodes.
 kill -KILL "$updater"
 wait "$updater" || true
 OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update run_installer
@@ -177,6 +206,7 @@ ovpn runtime health
 test "$(sha256sum /opt/ovpn/data/pki/ca.crt)" = "$certificate"
 test ! -e /opt/ovpn/.update-backup
 cmp /run/pre-rollback-service "$unit"
+test "$(stat -c '%d:%i' "${lock_paths[@]}")" = "$lock_inodes"
 service_action stop
 OVPN_VERSION="$(cat /fixtures/new-version)" OVPN_INSTALL_ACTION=update run_installer
 if service_action status; then

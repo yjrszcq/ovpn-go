@@ -12,6 +12,7 @@ base=''
 link=/usr/local/bin/ovpn
 state=''
 install_locked=0
+instance_locked=0
 transaction=0
 new_install=0
 new_service=0
@@ -263,8 +264,79 @@ write_service() {
   mv -f "$replacement" "$unit"
   reload_service
 }
+release_instance_locks() {
+  exec 6>&- 7>&- 8>&-
+  instance_locked=0
+}
+check_maintenance() {
+  # Detect an existing writer before stopping a healthy managed service. The
+  # full lock set is still acquired after stop, before any snapshot or mutation.
+  local path="$root/data/.ovpn-data.lock"
+  if [ -e "$path" ] || [ -L "$path" ]; then
+    [[ -f "$path" && ! -L "$path" && "$(stat -c %a "$path")" = 600 ]] || fail 'unsafe data coordination lock'
+    exec 6<>"$path"
+    if ! "$1" -n 6; then
+      exec 6>&-
+      fail 'instance maintenance is busy; retry after it finishes'
+    fi
+    exec 6>&-
+  fi
+}
+lock_instance() {
+  [ "$instance_locked" = 0 ] || return 0
+  local path
+  for path in "$root/run" "$root/data"; do
+    [[ ! -L "$path" && (! -e "$path" || -d "$path") ]] || return 1
+    mkdir -p "$path" || return 1
+  done
+  for path in "$root/run/.server.lock" "$root/data/.ovpn-runtime.lock" "$root/data/.ovpn-data.lock"; do
+    if [ ! -e "$path" ] && [ ! -L "$path" ]; then (
+      set -C
+      : >"$path"
+    ) || return 1; fi
+    [[ -f "$path" && ! -L "$path" && "$(stat -c %a "$path")" = 600 ]] || return 1
+  done
+  # Match Go's lock ordering: supervisor, shared-data runtime, then data writer.
+  exec 8<>"$root/run/.server.lock" || return 1
+  "$1" -n 8 || {
+    echo 'ovpn: unmanaged instance detected; stop it before updating' >&2
+    return 1
+  }
+  exec 7<>"$root/data/.ovpn-runtime.lock" || return 1
+  "$1" -n 7 || {
+    echo 'ovpn: instance maintenance is busy; retry after it finishes' >&2
+    return 1
+  }
+  exec 6<>"$root/data/.ovpn-data.lock" || return 1
+  "$1" -n 6 || {
+    echo 'ovpn: instance maintenance is busy; retry after it finishes' >&2
+    return 1
+  }
+  instance_locked=1
+}
+# Restore mutable directories without unlinking coordination locks. Waiters may
+# already hold descriptors to those inodes, including after an interrupted update.
+restore_mutable() (
+  shopt -s dotglob nullglob
+  local name="$1" entry entry_name
+  for entry in "$root/$name/"*; do
+    entry_name="${entry##*/}"
+    case "$name/$entry_name" in run/.server.lock | data/.ovpn-runtime.lock | data/.ovpn-data.lock) continue ;; esac
+    rm -rf -- "$entry" || return 1
+  done
+  if [ -d "$journal/$name" ]; then
+    for entry in "$journal/$name/"*; do
+      entry_name="${entry##*/}"
+      case "$name/$entry_name" in run/.server.lock | data/.ovpn-runtime.lock | data/.ovpn-data.lock) continue ;; esac
+      cp -a "$entry" "$root/$name/" || return 1
+    done
+    chown "$(stat -c %u:%g "$journal/$name")" "$root/$name" || return 1
+    chmod "$(stat -c %a "$journal/$name")" "$root/$name" || return 1
+  fi
+)
 begin_update() {
   check_service_owner
+  check_maintenance "$1"
   was_running=0
   if service status >/dev/null 2>&1; then
     was_running=1
@@ -273,10 +345,7 @@ begin_update() {
   printf '%s\n' "$was_running" >"$journal/was-running"
   transaction=1
   if [ "$was_running" = 1 ]; then service stop; fi
-  if [ -f "$root/run/.server.lock" ]; then
-    exec 8<>"$root/run/.server.lock"
-    "$1" -n 8 || fail 'unmanaged instance detected; stop it before updating'
-  fi
+  lock_instance "$1" || fail 'instance is busy or its coordination locks are unsafe'
   for name in ovpn bin runtime MANIFEST.sha256 config data run; do
     if [ -e "$root/$name" ] || [ -L "$root/$name" ]; then cp -a "$root/$name" "$journal/$name"; fi
   done
@@ -284,7 +353,7 @@ begin_update() {
   : >"$journal/ready"
 }
 finish_update() {
-  exec 8>&-
+  release_instance_locks
   if [ "$was_running" = 1 ]; then
     service start
     healthy || fail 'updated service failed health checks'
@@ -304,19 +373,27 @@ refresh_service() {
 rollback() {
   [ -d "$journal" ] || return 0
   if [ ! -f "$journal/ready" ]; then
-    if [ "$(cat "$journal/was-running" 2>/dev/null)" = 1 ]; then service start || return 1; fi
-    rm -rf -- "$journal"
+    release_instance_locks
+    if [ "$(cat "$journal/was-running" 2>/dev/null)" = 1 ]; then service start && healthy || return 1; fi
+    rm -rf -- "$journal" || return 1
     return 0
   fi
   service stop >/dev/null 2>&1 || true
-  for name in ovpn bin runtime MANIFEST.sha256 config data run; do
-    rm -rf -- "${root:?}/$name"
-    if [ -e "$journal/$name" ] || [ -L "$journal/$name" ]; then cp -a "$journal/$name" "$root/$name"; fi
+  lock_instance "$journal/bin/flock" || {
+    release_instance_locks
+    return 1
+  }
+  for name in ovpn bin runtime MANIFEST.sha256 config; do
+    rm -rf -- "${root:?}/$name" || return 1
+    if [ -e "$journal/$name" ] || [ -L "$journal/$name" ]; then cp -a "$journal/$name" "$root/$name" || return 1; fi
   done
+  restore_mutable data || return 1
+  restore_mutable run || return 1
   if [ -f "$journal/service-definition" ]; then
-    cp -a "$journal/service-definition" "$unit"
-    reload_service
+    cp -a "$journal/service-definition" "$unit" || return 1
+    reload_service || return 1
   fi
+  release_instance_locks
   if [ "$(cat "$journal/was-running")" = 1 ]; then
     if ! service start || ! healthy; then
       printf 'ovpn: rollback restored files, but service recovery failed; backup: %s\n' "$journal" >&2
@@ -331,8 +408,8 @@ cleanup() {
   if [ "$wizard_starting" = 1 ]; then service stop >/dev/null 2>&1 || true; fi
   if [ "$status" = 130 ] && [ -n "$state" ]; then say 'Interrupted; rerun and select the same action to resume.' '操作中断；重新运行并选择相同操作即可继续。'; fi
   if [ -n "$candidate" ]; then rm -f -- "$candidate"; fi
-  exec 8>&-
   if [ "$transaction" = 1 ]; then rollback || status=1; fi
+  release_instance_locks
   if [ "$status" != 0 ] && [ "$new_install" = 1 ]; then
     if [ "$new_service" = 1 ]; then
       if [ "$manager" = systemd ]; then
@@ -565,11 +642,9 @@ uninstall() {
   if ! service status >/dev/null 2>&1 && "$root/ovpn" runtime status >/dev/null 2>&1; then fail 'unmanaged instance detected; stop it before uninstalling'; fi
   check_service_owner
   if [ -d "$journal" ]; then rollback || fail 'interrupted update recovery failed'; fi
+  check_maintenance "$root/bin/flock"
   service stop
-  if [ -f "$root/run/.server.lock" ]; then
-    exec 8<>"$root/run/.server.lock"
-    "$root/bin/flock" -n 8 || fail 'unmanaged instance detected'
-  fi
+  lock_instance "$root/bin/flock" || fail 'instance is busy or its coordination locks are unsafe'
   if [ "$manager" = systemd ]; then systemctl disable ovpn.service; else rc-update del ovpn default || true; fi
   # Complete the short removal section once confirmed; prompts and service stop remain interruptible.
   trap '' INT TERM HUP

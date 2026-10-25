@@ -129,6 +129,8 @@ Updates also migrate this installation’s service entrypoint to `ovpn server ru
 
 Updates require the same data schema and refuse downgrades. Repeating installation or updating to the installed version preserves state. Stop manually launched instances before updating; the updater refuses to terminate them. Keep independent backups as described in the [operations guide](operations.md).
 
+Updates and uninstallations refuse to proceed while maintenance holds the instance; wait for it to finish and retry.
+
 ## Uninstall
 
 Run the same installer command and select Uninstall. By default, configuration, certificates, database and logs are retained. The service is stopped and the program, service definition and command link are removed. Reinstalling in the same directory reuses retained data. Permanent deletion requires choosing not to keep data, typing `DELETE` and separately confirming uninstall. Back up first; deleted data cannot be recovered by the installer.

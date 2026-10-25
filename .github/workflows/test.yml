@@ -54,6 +54,7 @@ jobs:
         run: |
           python3 tests/smoke/bundle/release-assets-test.py
           python3 tests/smoke/bundle/installer-dry-run.py
+          python3 tests/smoke/bundle/installer-rollback-test.py
           docker run --rm -v "$PWD:/work:ro" -w /work rhysd/actionlint:1.7.7
           docker run --rm -v "$PWD:/work:ro" -w /work koalaman/shellcheck:v0.10.0 -e SC1091,SC2016 \
             scripts/docker-build.sh \
