@@ -127,6 +127,7 @@ ovpn
 │   ├── run             监督 OpenVPN、broker 和可选 API。
 │   └── render          渲染 applied 服务端配置。
 ├── config
+│   ├── edit            使用编辑器编辑配置，可选编辑后 plan 或 apply。
 │   ├── validate        验证期望 YAML 配置。
 │   ├── show            显示 applied SQLite 配置。
 │   ├── export          将 applied 配置导出为 YAML。

@@ -127,6 +127,7 @@ ovpn
 │   ├── run             Supervise OpenVPN, its broker, and optional API.
 │   └── render          Render the applied server configuration.
 ├── config
+│   ├── edit            Edit configuration; optionally plan or apply after editing.
 │   ├── validate        Validate the desired YAML configuration.
 │   ├── show            Show the applied SQLite configuration.
 │   ├── export          Export the applied configuration as YAML.
