@@ -253,7 +253,7 @@ func runServerRun(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return writeError(stderr, apperror.Wrap(apperror.ExitPolicy, "runtime_state_refused", "runtime state is invalid", err))
 	}
-	if bootstrapEnvironmentActive(os.LookupEnv) {
+	if !empty && bootstrapEnvironmentActive(os.LookupEnv) {
 		fmt.Fprintln(stderr, "ovpn: warning: bootstrap environment ignored: instance is already initialized; edit config.yaml and run config plan/apply")
 	}
 	configPath := environmentOr("OVPN_CONFIG_FILE", configservice.DefaultPath)
