@@ -29,6 +29,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 RUN apk add --no-cache flock
 COPY packaging/bundle/assemble.py /tmp/assemble.py
 COPY templates/ /bundle/runtime/share/templates/
+COPY examples/services/ /bundle/runtime/share/services/
 COPY compatibility/contract.json /bundle/runtime/share/compatibility/contract.json
 COPY config.example.yaml /bundle/config/config.example.yaml
 COPY LICENSE NOTICE /bundle/runtime/licenses/project/

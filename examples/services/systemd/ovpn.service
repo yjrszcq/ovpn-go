@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenVPN server
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+ExecStart="/opt/ovpn/ovpn" server run
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+KillMode=mixed
+[Install]
+WantedBy=multi-user.target

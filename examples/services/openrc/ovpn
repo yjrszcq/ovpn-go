@@ -1,0 +1,25 @@
+#!/sbin/openrc-run
+name="ovpn"
+command="/opt/ovpn/ovpn"
+pidfile="/run/ovpn-service.pid"
+output_log="/opt/ovpn/run/service.log"
+error_log="/opt/ovpn/run/service-error.log"
+depend() { need net; }
+start() {
+ ebegin "Starting ovpn"
+ start-stop-daemon --start --background --make-pidfile --pidfile "$pidfile" --exec "$command" --stdout "$output_log" --stderr "$error_log" -- server run
+ eend $?
+}
+stop() {
+ ebegin "Stopping ovpn"
+ if start-stop-daemon --stop --test --quiet --pidfile "$pidfile"; then
+  start-stop-daemon --stop --retry TERM/30/KILL/5 --pidfile "$pidfile" || { eend 1; return 1; }
+ fi
+ rm -f "$pidfile"
+ eend 0
+}
+status() {
+ if start-stop-daemon --stop --test --quiet --pidfile "$pidfile"; then einfo "ovpn is started"; return 0; fi
+ einfo "ovpn is stopped"
+ return 3
+}

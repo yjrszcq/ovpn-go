@@ -191,6 +191,116 @@ acquire_lock() {
   "$1" -n 9 || fail 'another installation/update is active'
   install_locked=1
 }
+# One renderer is used for fresh installs and transactional service migration.
+render_service() {
+  if [ "$manager" = systemd ]; then
+    cat <<SERVICE
+[Unit]
+Description=OpenVPN server
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+ExecStart="$root/ovpn" server run
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+KillMode=mixed
+[Install]
+WantedBy=multi-user.target
+SERVICE
+  else
+    cat <<SERVICE
+#!/sbin/openrc-run
+name="ovpn"
+command="$root/ovpn"
+pidfile="/run/ovpn-service.pid"
+output_log="$root/run/service.log"
+error_log="$root/run/service-error.log"
+depend() { need net; }
+start() {
+ ebegin "Starting ovpn"
+ start-stop-daemon --start --background --make-pidfile --pidfile "\$pidfile" --exec "\$command" --stdout "\$output_log" --stderr "\$error_log" -- server run
+ eend \$?
+}
+stop() {
+ ebegin "Stopping ovpn"
+ if start-stop-daemon --stop --test --quiet --pidfile "\$pidfile"; then
+  start-stop-daemon --stop --retry TERM/30/KILL/5 --pidfile "\$pidfile" || { eend 1; return 1; }
+ fi
+ rm -f "\$pidfile"
+ eend 0
+}
+status() {
+ if start-stop-daemon --stop --test --quiet --pidfile "\$pidfile"; then einfo "ovpn is started"; return 0; fi
+ einfo "ovpn is stopped"
+ return 3
+}
+SERVICE
+  fi
+}
+check_service_owner() {
+  [[ -f "$unit" && ! -L "$unit" ]] || fail 'service definition does not belong to this installation'
+  if [ "$manager" = systemd ]; then
+    grep -Fxq "ExecStart=\"$root/ovpn\"" "$unit" || grep -Fxq "ExecStart=\"$root/ovpn\" server run" "$unit" || fail 'service definition does not belong to this installation'
+  else
+    grep -Fxq "command=\"$root/ovpn\"" "$unit" || fail 'service definition does not belong to this installation'
+  fi
+}
+reload_service() {
+  if [ "$manager" = systemd ]; then systemctl daemon-reload; fi
+}
+write_service() {
+  if [ -f "$unit" ]; then cp -p "$unit" "$work/ovpn-service"; else
+    : >"$work/ovpn-service"
+    if [ "$manager" = systemd ]; then chmod 644 "$work/ovpn-service"; else chmod 755 "$work/ovpn-service"; fi
+  fi
+  render_service >"$work/ovpn-service"
+  # Place the temporary file on the service filesystem before atomic replacement.
+  local replacement
+  replacement="$(mktemp "${unit}.XXXXXX")"
+  cp -p "$work/ovpn-service" "$replacement"
+  mv -f "$replacement" "$unit"
+  reload_service
+}
+begin_update() {
+  check_service_owner
+  was_running=0
+  if service status >/dev/null 2>&1; then
+    was_running=1
+  elif "$root/ovpn" runtime status >/dev/null 2>&1; then fail 'unmanaged instance detected; stop it before updating'; fi
+  mkdir "$journal"
+  printf '%s\n' "$was_running" >"$journal/was-running"
+  transaction=1
+  if [ "$was_running" = 1 ]; then service stop; fi
+  if [ -f "$root/run/.server.lock" ]; then
+    exec 8<>"$root/run/.server.lock"
+    "$1" -n 8 || fail 'unmanaged instance detected; stop it before updating'
+  fi
+  for name in ovpn bin runtime MANIFEST.sha256 config data run; do
+    if [ -e "$root/$name" ] || [ -L "$root/$name" ]; then cp -a "$root/$name" "$journal/$name"; fi
+  done
+  cp -a "$unit" "$journal/service-definition"
+  : >"$journal/ready"
+}
+finish_update() {
+  exec 8>&-
+  if [ "$was_running" = 1 ]; then
+    service start
+    healthy || fail 'updated service failed health checks'
+  fi
+  transaction=0
+  rm -rf -- "$journal"
+}
+refresh_service() {
+  check_service_owner
+  render_service >"$work/expected-service"
+  if "$root/bin/cmp" -s "$work/expected-service" "$unit"; then return; fi
+  begin_update "$root/bin/flock"
+  write_service
+  finish_update
+  say 'Migrated service to ovpn server run; original service state restored.' '已将服务入口迁移至 ovpn server run，并恢复原服务状态。'
+}
 rollback() {
   [ -d "$journal" ] || return 0
   if [ ! -f "$journal/ready" ]; then
@@ -203,6 +313,10 @@ rollback() {
     rm -rf -- "${root:?}/$name"
     if [ -e "$journal/$name" ] || [ -L "$journal/$name" ]; then cp -a "$journal/$name" "$root/$name"; fi
   done
+  if [ -f "$journal/service-definition" ]; then
+    cp -a "$journal/service-definition" "$unit"
+    reload_service
+  fi
   if [ "$(cat "$journal/was-running")" = 1 ]; then
     if ! service start || ! healthy; then
       printf 'ovpn: rollback restored files, but service recovery failed; backup: %s\n' "$journal" >&2
@@ -422,13 +536,14 @@ setup() {
     healthy || fail 'service failed health checks; configuration is retained; rerun to retry'
     wizard_starting=0
   fi
+  say 'First start initializes empty data from config.yaml; no manual init/apply is needed. After initialization, edit with ovpn config edit --apply; restarting alone keeps the applied configuration.' '首次启动会使用 config.yaml 初始化空数据，无需手动 init/apply。初始化后可用 ovpn config edit --apply 修改并应用配置；单纯重启保留已应用配置。'
   say "Installation ready: $root. Use: sudo ovpn runtime health" "安装完成：$root。检查状态：sudo ovpn runtime health"
 }
 uninstall() {
   [[ -f "$root/.ovpn-install" && ! -L "$root/.ovpn-install" ]] || fail 'not an installer-managed installation'
   [ "$(cat "$root/.ovpn-install")" = "$manager" ] || fail 'service manager changed'
   acquire_lock "$root/bin/flock"
-  if [ -L "$unit" ] || ! grep -Fq "\"$root/ovpn\"" "$unit"; then fail 'service definition does not belong to this installation'; fi
+  check_service_owner
   local keep=true
   if [ "$interactive" = 1 ]; then
     answer keep_data 'Keep configuration, certificates, database and logs (yes/no)' '保留配置、证书、数据库和日志（yes/no）' true bool
@@ -448,6 +563,7 @@ uninstall() {
     record uninstall_confirmed true
   else fail 'uninstall requires interactive confirmation'; fi
   if ! service status >/dev/null 2>&1 && "$root/ovpn" runtime status >/dev/null 2>&1; then fail 'unmanaged instance detected; stop it before uninstalling'; fi
+  check_service_owner
   if [ -d "$journal" ]; then rollback || fail 'interrupted update recovery failed'; fi
   service stop
   if [ -f "$root/run/.server.lock" ]; then
@@ -493,7 +609,7 @@ if [ "$dry_run" = 1 ]; then
         answer update_confirmed 'Continue update (yes/no)' '继续更新（yes/no）' true bool
         [ "$REPLY" = true ] || exit 0
       fi
-      say 'DRY RUN: would lock, snapshot, update and health-check; rollback on failure; preserve data and service state.' '试运行：将锁定、快照、更新和检查健康；失败回滚，保留数据和服务状态。'
+      say 'DRY RUN: would lock, snapshot program/data/service definition, update to ovpn server run and health-check; rollback on failure; preserve data and service state.' '试运行：将锁定、快照程序/数据/服务定义，更新至 ovpn server run 并检查健康；失败回滚，保留数据和服务状态。'
     fi
   else
     if [ "$interactive" = 1 ]; then
@@ -519,7 +635,9 @@ fi
 if [ "$action" = install ] && [ -f "$root/.ovpn-install" ] && [ -x "$root/ovpn" ]; then
   [ "$(cat "$root/.ovpn-install")" = "$manager" ] || fail 'service manager changed'
   acquire_lock "$root/bin/flock"
+  check_service_owner
   if [ -d "$journal" ]; then rollback || fail 'interrupted update recovery failed'; fi
+  refresh_service
   setup
   finish_progress
   exit 0
@@ -604,6 +722,7 @@ fi
 if [ -e "$root" ] && [ "$retained" = 0 ]; then
   [ -f "$root/.ovpn-install" ] || fail 'existing directory is not an ovpn installation'
   [ "$(cat "$root/.ovpn-install")" = "$manager" ] || fail 'service manager changed'
+  check_service_owner
   if [ -d "$journal" ]; then rollback || fail 'interrupted update recovery failed'; fi
   grep -Eq '"data_schema": 4([,[:space:]]|$)' "$root/runtime/manifest.json" || fail 'installed data schema is incompatible'
   [ -x "$root/ovpn" ] || fail 'existing executable is missing'
@@ -613,44 +732,25 @@ if [ -e "$root" ] && [ "$retained" = 0 ]; then
   IFS=. read -r new_major new_minor new_patch <<<"$version"
   if ((10#$new_major < 10#$old_major || (10#$new_major == 10#$old_major && 10#$new_minor < 10#$old_minor) || (10#$new_major == 10#$old_major && 10#$new_minor == 10#$old_minor && 10#$new_patch < 10#$old_patch))); then fail 'downgrade refused'; fi
   [ "$action" = update ] || {
+    refresh_service
     setup
     finish_progress
     exit 0
   }
-  if [ "$old_version" = "$version" ]; then
+  if [ "$old_version" = "$version" ] && "$package/bin/cmp" -s "$root/MANIFEST.sha256" "$package/MANIFEST.sha256"; then
+    refresh_service
     say "ovpn is already $version" "ovpn 已是 $version"
     finish_progress
     exit 0
   fi
-  if service status >/dev/null 2>&1; then
-    was_running=1
-  elif "$root/ovpn" runtime status >/dev/null 2>&1; then fail 'unmanaged instance detected; stop it before updating'; fi
-  # Preserve state before any new executable can open the database.
-  mkdir "$journal"
-  printf '%s\n' "$was_running" >"$journal/was-running"
-  transaction=1
-  if [ "$was_running" = 1 ]; then service stop; fi
-  if [ -f "$root/run/.server.lock" ]; then
-    exec 8<>"$root/run/.server.lock"
-    "$package/bin/flock" -n 8 || fail 'unmanaged instance detected; stop it before updating'
-  fi
-  for name in ovpn bin runtime MANIFEST.sha256 config data run; do
-    if [ -e "$root/$name" ] || [ -L "$root/$name" ]; then cp -a "$root/$name" "$journal/$name"; fi
-  done
-  : >"$journal/ready"
-  transaction=1
+  begin_update "$package/bin/flock"
   for name in ovpn bin runtime MANIFEST.sha256; do
     rm -rf -- "${root:?}/$name"
     cp -a "$package/$name" "$root/$name"
   done
   cp -a "$package/config/config.example.yaml" "$root/config/config.example.yaml"
-  exec 8>&-
-  if [ "$was_running" = 1 ]; then
-    service start
-    healthy || fail 'updated service failed health checks'
-  fi
-  transaction=0
-  rm -rf -- "$journal"
+  write_service
+  finish_update
   say "Updated ovpn $old_version -> $version; original service state restored" "已更新 ovpn $old_version -> $version；已恢复原服务状态"
 else
   [ "$action" = install ] || fail 'no installation to update'
@@ -674,58 +774,9 @@ else
   fi
   mkdir -p "$(dirname "$link")"
   ln -s "$root/ovpn" "$link"
-  if [ "$manager" = systemd ]; then
-    if [ -e /etc/systemd/system/ovpn.service ] || [ -L /etc/systemd/system/ovpn.service ]; then fail 'existing ovpn.service must not be replaced'; fi
-    new_service=1
-    cat >/etc/systemd/system/ovpn.service <<SERVICE
-[Unit]
-Description=OpenVPN server
-After=network-online.target
-Wants=network-online.target
-[Service]
-Type=simple
-ExecStart="$root/ovpn"
-Restart=on-failure
-RestartSec=3
-TimeoutStopSec=30
-KillMode=mixed
-[Install]
-WantedBy=multi-user.target
-SERVICE
-    systemctl daemon-reload
-  else
-    if [ -e /etc/init.d/ovpn ] || [ -L /etc/init.d/ovpn ]; then fail 'existing OpenRC ovpn service must not be replaced'; fi
-    new_service=1
-    cat >/etc/init.d/ovpn <<SERVICE
-#!/sbin/openrc-run
-name="ovpn"
-command="$root/ovpn"
-pidfile="/run/ovpn-service.pid"
-output_log="$root/run/service.log"
-error_log="$root/run/service-error.log"
-depend() { need net; }
-start() {
- ebegin "Starting ovpn"
- start-stop-daemon --start --background --make-pidfile --pidfile "\$pidfile" \
-  --exec "\$command" --stdout "\$output_log" --stderr "\$error_log"
- eend \$?
-}
-stop() {
- ebegin "Stopping ovpn"
- if start-stop-daemon --stop --test --quiet --pidfile "\$pidfile"; then
-  start-stop-daemon --stop --retry TERM/30/KILL/5 --pidfile "\$pidfile" || { eend 1; return 1; }
- fi
- rm -f "\$pidfile"
- eend 0
-}
-status() {
- if start-stop-daemon --stop --test --quiet --pidfile "\$pidfile"; then einfo "ovpn is started"; return 0; fi
- einfo "ovpn is stopped"
- return 3
-}
-SERVICE
-    chmod 755 /etc/init.d/ovpn
-  fi
+  if [ -e "$unit" ] || [ -L "$unit" ]; then fail 'existing service must not be replaced'; fi
+  new_service=1
+  write_service
   say "Installed ovpn $version at $root" "已安装 ovpn $version：$root"
   setup
 fi
