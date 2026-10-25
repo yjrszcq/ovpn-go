@@ -47,7 +47,7 @@ start() {
   return 1
 }
 stop() {
-  kill -TERM "$pid"
+  kill -"${1:-TERM}" "$pid"
   wait "$pid"
   pid=''
 }
@@ -69,7 +69,7 @@ rm -rf "$root/data" "$root/run"
 start
 grep -E '^port 1195$' "$root/data/server/server.conf"
 ovpn config show --json | grep -E '"revision": *1'
-stop
+stop INT
 if iptables-save | grep -E 'OVPN_|ovpn:'; then
   echo 'rules remain'
   exit 1
