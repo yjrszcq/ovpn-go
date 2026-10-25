@@ -49,6 +49,7 @@ func Prepare(executable, invoked string, args, environment []string) (Invocation
 		}
 	}
 	delete(env, "OVPN_EXEC_MODE")
+	env["OVPN_BUNDLE_DNS_UPDOWN"] = filepath.Join(root, "bin", "openvpn-dns-updown")
 	env["PATH"] = filepath.Join(root, "bin") + ":" + env["PATH"]
 	// Never export LD_LIBRARY_PATH into the host environment. Each dynamic program
 	// is executed through the bundled musl loader with its own search path.
@@ -73,6 +74,9 @@ func Prepare(executable, invoked string, args, environment []string) (Invocation
 		}
 	case "busybox":
 		binary = filepath.Join(root, "runtime", "bin", "busybox")
+	case "openvpn-dns-updown":
+		binary = filepath.Join(root, "runtime", "lib", "ld-musl.so.1")
+		argv = append([]string{binary, "--library-path", filepath.Join(root, "runtime", "lib"), filepath.Join(root, "runtime", "bin", "bash"), filepath.Join(root, "runtime", "share", "openvpn", "dns-updown")}, args...)
 	case "easyrsa":
 		binary = filepath.Join(root, "runtime", "bin", "busybox")
 		argv = append([]string{"busybox", "sh", filepath.Join(env["EASYRSA"], "easyrsa")}, args...)

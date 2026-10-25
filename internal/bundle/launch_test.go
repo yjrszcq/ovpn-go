@@ -62,3 +62,39 @@ func TestMissingRuntime(t *testing.T) {
 		t.Fatal("missing bundle accepted")
 	}
 }
+
+func TestOpenVPNUsesRelocatableDNSHelper(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bundle with spaces")
+	if err := os.MkdirAll(filepath.Join(root, "runtime"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{"ovpn", "runtime/manifest.json"} {
+		if err := os.WriteFile(filepath.Join(root, file), nil, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Install the actual wrapper to select the named program instead of an alias.
+	if err := os.MkdirAll(filepath.Join(root, "bin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../ovpn", filepath.Join(root, "bin", "openvpn")); err != nil {
+		t.Fatal(err)
+	}
+	inv, err := Prepare(filepath.Join(root, "ovpn"), "openvpn", []string{"--version"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(inv.Env, "\n"), "OVPN_BUNDLE_DNS_UPDOWN="+filepath.Join(root, "bin", "openvpn-dns-updown")) {
+		t.Fatalf("DNS helper command lost relocation: %q", inv.Args)
+	}
+	if err := os.Symlink("../ovpn", filepath.Join(root, "bin", "openvpn-dns-updown")); err != nil {
+		t.Fatal(err)
+	}
+	inv, err = Prepare(filepath.Join(root, "ovpn"), "openvpn-dns-updown", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.Path != filepath.Join(root, "runtime", "lib", "ld-musl.so.1") || inv.Args[3] != filepath.Join(root, "runtime", "bin", "bash") || inv.Args[4] != filepath.Join(root, "runtime", "share", "openvpn", "dns-updown") {
+		t.Fatalf("DNS helper does not use the private interpreter: %+v", inv)
+	}
+}

@@ -1,0 +1,42 @@
+--- a/src/openvpn/options.c
++++ b/src/openvpn/options.c
+@@ -801,6 +801,14 @@
+  * Any option not explicitly set here
+  * will be set to 0.
+  */
++/* The self-contained distribution resolves its trusted DNS helper at launch. */
++static const char *
++bundle_dns_updown(void)
++{
++    const char *path = getenv("OVPN_BUNDLE_DNS_UPDOWN");
++    return path && path[0] ? path : DEFAULT_DNS_UPDOWN;
++}
++
+ void
+ init_options(struct options *o)
+ {
+@@ -919,7 +927,7 @@
+ #endif /* ENABLE_DCO */
+ 
+ #ifdef ENABLE_DNS_UPDOWN_BY_DEFAULT
+-    o->dns_options.updown = DEFAULT_DNS_UPDOWN;
++    o->dns_options.updown = bundle_dns_updown();
+ #endif /* ENABLE_DNS_UPDOWN_BY_DEFAULT */
+ }
+ 
+@@ -7940,13 +7948,13 @@
+             /* force dns-updown run, even if a --up script is defined */
+             if (!dns_updown_user_set(dns))
+             {
+-                dns->updown = DEFAULT_DNS_UPDOWN;
++                dns->updown = bundle_dns_updown();
+                 dns->updown_flags = DNS_UPDOWN_FORCED;
+             }
+         }
+         else
+         {
+-            if (dns->updown && streq(dns->updown, DEFAULT_DNS_UPDOWN))
++            if (dns->updown && streq(dns->updown, bundle_dns_updown()))
+             {
+                 /* Unset the default command to prevent warnings */
+                 dns->updown = NULL;

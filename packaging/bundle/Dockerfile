@@ -3,12 +3,13 @@ FROM ${GO_BUNDLE_IMAGE} AS builder
 ARG OPENVPN_VERSION
 ARG OPENVPN_SOURCE_SHA256
 ENV GOTOOLCHAIN=local CGO_ENABLED=1 GOPROXY=direct
-RUN apk add --no-cache git build-base linux-headers openssl-dev lzo-dev lz4-dev libcap-ng-dev libnl3-dev curl bash easy-rsa openssl iproute2 iptables iptables-openrc busybox-static pax-utils python3 py3-elftools nano ca-certificates spdx-licenses-text
+RUN apk add --no-cache git build-base patch linux-headers openssl-dev lzo-dev lz4-dev libcap-ng-dev libnl3-dev curl bash easy-rsa openssl iproute2 iptables iptables-openrc busybox-static pax-utils python3 py3-elftools nano ca-certificates spdx-licenses-text
 COPY scripts/fetch-openvpn-source.sh /usr/local/bin/fetch-openvpn-source
+COPY packaging/bundle/openvpn-dns-runtime.patch /tmp/openvpn-dns-runtime.patch
 RUN OPENVPN_VERSION="$OPENVPN_VERSION" OPENVPN_SOURCE_SHA256="$OPENVPN_SOURCE_SHA256" fetch-openvpn-source /tmp/source \
  && mkdir /tmp/openvpn \
  && tar -xzf "/tmp/source/openvpn-$OPENVPN_VERSION.tar.gz" --strip-components=1 -C /tmp/openvpn \
- && cd /tmp/openvpn && ./configure --prefix=/usr/local --disable-debug --disable-plugin-auth-pam && make -j"$(nproc)" && make install \
+ && cd /tmp/openvpn && patch -p1 < /tmp/openvpn-dns-runtime.patch && ./configure --prefix=/usr/local --disable-debug --disable-plugin-auth-pam && make -j"$(nproc)" && make install \
  && mkdir -p /bundle/runtime/bin && cp /usr/local/sbin/openvpn /bundle/runtime/bin/
 WORKDIR /src
 COPY go.mod go.sum ./

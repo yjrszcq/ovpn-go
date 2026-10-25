@@ -23,6 +23,9 @@ for name in ('iptables', 'ip6tables', 'iptables-save', 'iptables-restore'):
 for source, target in [('/usr/share/easy-rsa', 'runtime/share/easy-rsa'),
                        ('/usr/lib/xtables', 'runtime/lib/xtables')]:
     shutil.copytree(source, root / target, symlinks=False, dirs_exist_ok=True)
+dns_helper = root / 'runtime/share/openvpn/dns-updown'
+dns_helper.parent.mkdir(parents=True, exist_ok=True)
+shutil.copy2('/usr/local/libexec/openvpn/dns-updown', dns_helper)
 ssl = root / 'runtime/etc/ssl'
 ssl.mkdir(parents=True)
 for name in ('openssl.cnf', 'cert.pem'):
@@ -59,7 +62,7 @@ bindir.mkdir()
 names = set(subprocess.check_output(['/bin/busybox.static', '--list'], text=True).splitlines())
 names.update(('ovpn', 'ovpn-hook', 'ovpn-broker', 'ovpn-api', 'openvpn', 'openssl',
               'ip', 'iptables', 'ip6tables', 'iptables-save', 'iptables-restore',
-              'easyrsa', 'bash', 'nano', 'flock'))
+              'easyrsa', 'openvpn-dns-updown', 'bash', 'nano', 'flock'))
 for name in sorted(names):
     (bindir / name).symlink_to('../ovpn')
 for name in ('data', 'run'):
@@ -69,6 +72,7 @@ for name in ('data', 'run'):
 licenses = root / 'runtime/licenses'
 shutil.copy2('/usr/local/go/LICENSE', licenses / 'Go-LICENSE')
 shutil.copy2('/tmp/openvpn/COPYING', licenses / 'OpenVPN-COPYING')
+shutil.copy2('/tmp/openvpn-dns-runtime.patch', licenses / 'openvpn-dns-runtime.patch')
 shutil.copytree('/usr/share/spdx/text', licenses / 'spdx', dirs_exist_ok=True)
 module_cache = Path(subprocess.check_output(['go', 'env', 'GOMODCACHE'], text=True).strip())
 for module in ('github.com/mattn/go-sqlite3@v1.14.48', 'go.yaml.in/yaml/v3@v3.0.4'):
@@ -77,7 +81,7 @@ for module in ('github.com/mattn/go-sqlite3@v1.14.48', 'go.yaml.in/yaml/v3@v3.0.
     for source in (module_cache / module).iterdir():
         if source.is_file() and source.name.upper().startswith(('LICENSE', 'NOTICE', 'COPYING')):
             shutil.copy2(source, directory / source.name)
-(licenses / 'SOURCE-OFFERS.txt').write_text('Alpine package source recipes and source URLs: https://gitlab.alpinelinux.org/alpine/aports/-/tree/3.24-stable\nOpenVPN source: https://swupdate.openvpn.org/community/releases/openvpn-' + os.environ['OPENVPN_VERSION'] + '.tar.gz\nGo source: https://go.dev/dl/\nPackage versions and upstream license metadata are recorded alongside this file.\n')
+(licenses / 'SOURCE-OFFERS.txt').write_text('Alpine package source recipes and source URLs: https://gitlab.alpinelinux.org/alpine/aports/-/tree/3.24-stable\nOpenVPN source: https://swupdate.openvpn.org/community/releases/openvpn-' + os.environ['OPENVPN_VERSION'] + '.tar.gz\nThe bundled OpenVPN DNS relocation patch is included as runtime/licenses/openvpn-dns-runtime.patch.\nGo source: https://go.dev/dl/\nPackage versions and upstream license metadata are recorded alongside this file.\n')
 (licenses / 'package-license-metadata.txt').write_text(subprocess.check_output(['apk', 'info', '--license'], text=True))
 (licenses / 'packages.txt').write_text(subprocess.check_output(['apk', 'info', '-v'], text=True))
 arch = {'x86_64': 'amd64', 'aarch64': 'arm64'}[platform.machine()]
