@@ -190,6 +190,7 @@ func (server *controlServer) handle(ctx context.Context, connection net.Conn) {
 	select {
 	case server.busy <- struct{}{}:
 	default:
+		fmt.Fprintln(os.Stderr, "ovpn: configuration apply rejected: another apply is active")
 		_, _ = connection.Write([]byte("ERROR\n"))
 		return
 	}
@@ -208,6 +209,7 @@ func (server *controlServer) handle(ctx context.Context, connection net.Conn) {
 	select {
 	case err := <-request.ready:
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "ovpn: configuration apply pause failed: %v\n", err)
 			_, _ = connection.Write([]byte("ERROR\n"))
 			return
 		}
@@ -232,6 +234,7 @@ func (server *controlServer) handle(ctx context.Context, connection net.Conn) {
 		<-server.busy
 		busyHeld = false
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "ovpn: configuration apply resume failed: %v\n", err)
 			_, _ = connection.Write([]byte("ERROR\n"))
 			return
 		}

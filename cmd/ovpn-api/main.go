@@ -235,6 +235,7 @@ func newResources(database *storesqlite.Store, instanceID, dataDir string) (http
 			}
 			session, err := runtimecontrol.BeginApply(ctx, runtimeDir)
 			if err != nil {
+				log.Printf("configuration apply: pause runtime: %v", err)
 				return configurationservice.ApplyResult{}, err
 			}
 			desired, err = loadConfigState(ctx, input.DesiredDigest, input.CurrentRevision)
@@ -245,6 +246,7 @@ func newResources(database *storesqlite.Store, instanceID, dataDir string) (http
 			resumeCtx, cancelResume := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancelResume()
 			if resumeErr := session.Resume(resumeCtx); resumeErr != nil {
+				log.Printf("configuration apply: resume runtime: %v", resumeErr)
 				return configurationservice.ApplyResult{}, resumeErr
 			}
 			if err == nil {
