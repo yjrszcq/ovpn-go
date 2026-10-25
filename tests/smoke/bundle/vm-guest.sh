@@ -8,7 +8,13 @@ finish() {
   trap - EXIT
   if [ "$code" = 0 ]; then echo OVPN_VM_TEST_PASS; else
     echo "OVPN_VM_TEST_FAIL=$code"
-    if [ -d /run/systemd/system ]; then journalctl -b --no-pager -u ovpn -u dbus -n 80 || true; fi
+    if [ -d /run/systemd/system ]; then journalctl -b --no-pager -u ovpn -u dbus -u dbus-broker -n 80 || true; fi
+    for diagnostic in /run/fixture-http.log /run/interrupted.log /run/unmanaged.log; do
+      if [ -f "$diagnostic" ]; then
+        printf '%s\n' "--- $diagnostic ---"
+        tail -n 80 "$diagnostic" || true
+      fi
+    done
   fi
   sync
   if command -v systemctl >/dev/null && [ -d /run/systemd/system ]; then systemctl poweroff --no-block; else poweroff; fi
@@ -17,6 +23,10 @@ trap finish EXIT
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 cat /etc/os-release
 ls -ld /dev /dev/null /opt
+if [ -d /run/systemd/system ]; then
+  systemctl start dbus.service
+  systemctl is-active --quiet dbus.service
+fi
 modprobe tun
 mkdir -p /dev/net
 [ -c /dev/net/tun ] || mknod /dev/net/tun c 10 200
@@ -192,11 +202,36 @@ test "$(sha256sum /opt/ovpn/data/pki/ca.crt)" = "$certificate"
 # Kill a real updater after replacement, before its failing health check ends.
 OVPN_VERSION="$(cat /fixtures/bad-version)" OVPN_DOWNLOAD_BASE_URL=http://127.0.0.1:18080/bad OVPN_INSTALL_ACTION=update run_installer --exec >/run/interrupted.log 2>&1 &
 updater=$!
-for _ in $(seq 1 30); do
-  if [ -f /opt/ovpn/.update-backup/ready ] && [ "$(ovpn version --short)" = "$(cat /fixtures/bad-version)" ]; then break; fi
-  sleep 1
-done
-test -f /opt/ovpn/.update-backup/ready
+# Observe the transaction directly: repeated CLI launches can miss the health-check
+# window on slow VM runners. The journal and manifest identify replacement without
+# launching another runtime or competing with the updater for its locks.
+python3 - "$updater" <<'PYTHON'
+import json
+import os
+from pathlib import Path
+import sys
+import time
+
+updater = int(sys.argv[1])
+expected = Path('/fixtures/bad-version').read_text().strip()
+deadline = time.monotonic() + 180
+while time.monotonic() < deadline:
+    try:
+        metadata = json.loads(Path('/opt/ovpn/runtime/manifest.json').read_text())
+        if (Path('/opt/ovpn/.update-backup/ready').is_file()
+                and metadata['version'] == expected
+                and not any(Path(f'/proc/{updater}/fd/{fd}').exists() for fd in (6, 7, 8))):
+            break
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    try:
+        os.kill(updater, 0)
+    except ProcessLookupError:
+        raise SystemExit('Updater exited before the interruption checkpoint')
+    time.sleep(0.05)
+else:
+    raise SystemExit('Updater did not reach the interruption checkpoint within 180 seconds')
+PYTHON
 # Health checking releases maintenance locks to permit the managed service to start.
 # Recovery must reacquire them before restoring, not replace their inodes.
 kill -KILL "$updater"

@@ -52,20 +52,42 @@ docker run "${vm_args[@]}" "$driver" bash -euc '
  # Docker deliberately injects a read-only hosts/resolver; replace exported
  # placeholders with normal guest files and avoid container-specific init hints.
  rm -f /work/rootfs/.dockerenv
+ # Container roots may omit machine-id entirely. A real system bus needs a
+ # readable identity before it starts, including after dropping privileges.
+ if [ -d /work/rootfs/etc/systemd/system ]; then
+  rm -f /work/rootfs/etc/machine-id
+  tr -d "-" </proc/sys/kernel/random/uuid >/work/rootfs/etc/machine-id
+  chmod 644 /work/rootfs/etc/machine-id
+  mkdir -p /work/rootfs/var/lib/dbus
+  rm -f /work/rootfs/var/lib/dbus/machine-id
+  ln -s /etc/machine-id /work/rootfs/var/lib/dbus/machine-id
+ fi
  printf "127.0.0.1 localhost\n" >/work/rootfs/etc/hosts
  printf "nameserver 10.0.2.3\n" >/work/rootfs/etc/resolv.conf
  printf "/dev/vda / ext4 defaults 0 0\n" >/work/rootfs/etc/fstab
  truncate -s 4G /work/root.img
  mkfs.ext4 -q -F -d /work/rootfs /work/root.img
  for boot in 1 2; do
-    timeout 900 "${emulator[@]}" -cpu "$cpu" -m 1024 -smp 2 -nographic -no-reboot \
+    result=0
+    timeout 1200 "${emulator[@]}" -cpu "$cpu" -m 1024 -smp 2 -nographic -no-reboot \
    -kernel /boot/vmlinuz-virt -initrd /boot/initramfs-virt \
       -append "root=/dev/vda rw console=$console rootfstype=ext4 quiet systemd.firstboot=no" \
    -drive file=/work/root.img,format=raw,if=virtio \
-   -netdev user,id=net -device virtio-net-pci,netdev=net >"/work/boot-$boot.log" 2>&1
+   -netdev user,id=net -device virtio-net-pci,netdev=net >"/work/boot-$boot.log" 2>&1 || result=$?
   cat "/work/boot-$boot.log"
+  if [ "$result" != 0 ]; then
+   echo "VM boot $boot failed with status $result" >&2
+   exit "$result"
+  fi
+  if grep -Fq OVPN_VM_TEST_FAIL "/work/boot-$boot.log"; then
+   echo "VM assertions failed during boot $boot" >&2
+   exit 1
+  fi
+  if [ "$boot" = 1 ]; then marker=OVPN_VM_REBOOT; else marker=OVPN_VM_TEST_PASS; fi
+  if ! grep -Fq "$marker" "/work/boot-$boot.log"; then
+   echo "VM boot $boot did not reach $marker" >&2
+   exit 1
+  fi
  done
- grep -Fq OVPN_VM_TEST_PASS /work/boot-2.log
- ! grep -Fq OVPN_VM_TEST_FAIL /work/boot-1.log
 '
 printf 'VM service verification passed: %s linux/%s\n' "$base" "$architecture"
