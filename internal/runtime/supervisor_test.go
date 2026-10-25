@@ -166,7 +166,7 @@ func TestSupervisorStartsAndStopsOptionalAPI(t *testing.T) {
 	t.Setenv("OVPN_RUNTIME_HELPER", "1")
 	t.Setenv("OVPN_RUNTIME_MARKERS", markers)
 	installHelperBuilder(t)
-	supervisor := testSupervisor(filepath.Join(t.TempDir(), "data"), filepath.Join(t.TempDir(), "run"))
+	supervisor := testSupervisor(filepath.Join(t.TempDir(), "data"), filepath.Join(t.TempDir(), "run"), testAPIInstance())
 	supervisor.APIBinary = "fake-api"
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -190,7 +190,7 @@ func TestSupervisorFailsWhenOptionalAPIExits(t *testing.T) {
 	t.Setenv("OVPN_RUNTIME_MARKERS", markers)
 	t.Setenv("OVPN_RUNTIME_API_EXIT", "1")
 	installHelperBuilder(t)
-	supervisor := testSupervisor(filepath.Join(t.TempDir(), "data"), filepath.Join(t.TempDir(), "run"))
+	supervisor := testSupervisor(filepath.Join(t.TempDir(), "data"), filepath.Join(t.TempDir(), "run"), testAPIInstance())
 	supervisor.APIBinary = "fake-api"
 	err := supervisor.Run(context.Background(), nil, testAPIInstance())
 	if err == nil || !strings.Contains(err.Error(), "management API exited") {
@@ -328,7 +328,7 @@ func TestSupervisorPausesForApplyAndRestartsRuntime(t *testing.T) {
 		cancel()
 		t.Fatal(err)
 	}
-	if reloads.Load() != 1 || network.reconciled.Load() != 2 {
+	if reloads.Load() != 2 || network.reconciled.Load() != 2 {
 		cancel()
 		t.Fatalf("reloads=%d reconciled=%d", reloads.Load(), network.reconciled.Load())
 	}
@@ -419,8 +419,12 @@ func installHelperBuilder(t *testing.T) {
 	t.Cleanup(func() { commandBuilder = previous })
 }
 
-func testSupervisor(dataDir, runtimeDir string) Supervisor {
-	return Supervisor{DataDir: dataDir, RuntimeDir: runtimeDir, OpenVPNBinary: "fake-openvpn", BrokerBinary: "fake-broker", StartupTimeout: time.Second, StopTimeout: time.Second, Network: noOpNetwork{}}
+func testSupervisor(dataDir, runtimeDir string, initial ...storesqlite.InstanceState) Supervisor {
+	instance := testInstance()
+	if len(initial) != 0 {
+		instance = initial[0]
+	}
+	return Supervisor{ReloadInstance: func(context.Context, string) (storesqlite.InstanceState, error) { return instance, nil }, DataDir: dataDir, RuntimeDir: runtimeDir, OpenVPNBinary: "fake-openvpn", BrokerBinary: "fake-broker", StartupTimeout: time.Second, StopTimeout: time.Second, Network: noOpNetwork{}}
 }
 
 type noOpNetwork struct{}
@@ -514,6 +518,46 @@ func TestSupervisorActivatesAPIAndReloadsItAfterApply(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForFile(t, filepath.Join(markers, "api-hup"))
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSupervisorLoadsAppliedStateUnderStartupLocks(t *testing.T) {
+	supervisor := testSupervisor(filepath.Join(t.TempDir(), "data"), filepath.Join(t.TempDir(), "run"))
+	rejected := errors.New("reject changed startup state")
+	supervisor.ReloadInstance = func(ctx context.Context, dataDir string) (storesqlite.InstanceState, error) {
+		for _, path := range []string{filepath.Join(supervisor.RuntimeDir, ".server.lock"), artifact.RuntimeLockPath(dataDir)} {
+			lockCtx, cancel := context.WithTimeout(ctx, 30*time.Millisecond)
+			lock, err := artifact.AcquireLock(lockCtx, path, artifact.LockExclusive)
+			cancel()
+			if lock != nil {
+				_ = lock.Release()
+			}
+			if !errors.Is(err, artifact.ErrLocked) {
+				t.Errorf("startup state loaded without lock %s: %v", path, err)
+			}
+		}
+		return storesqlite.InstanceState{}, rejected
+	}
+	if err := supervisor.Run(context.Background(), nil, testInstance()); !errors.Is(err, rejected) {
+		t.Fatalf("startup ignored authoritative reload: %v", err)
+	}
+}
+
+func TestSupervisorStartsWithUpdatedAPIConfiguration(t *testing.T) {
+	markers := t.TempDir()
+	t.Setenv("OVPN_RUNTIME_HELPER", "1")
+	t.Setenv("OVPN_RUNTIME_MARKERS", markers)
+	installHelperBuilder(t)
+	supervisor := testSupervisor(filepath.Join(t.TempDir(), "data"), filepath.Join(t.TempDir(), "run"), testAPIInstance())
+	supervisor.APIBinary = "fake-api"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- supervisor.Run(ctx, nil, testInstance()) }()
+	waitForFile(t, filepath.Join(markers, "api-started"))
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatal(err)

@@ -81,6 +81,16 @@ func (supervisor Supervisor) Run(ctx context.Context, hup <-chan os.Signal, inst
 			_ = runtimeLock.Release()
 		}
 	}()
+	reload := supervisor.ReloadInstance
+	if reload == nil {
+		reload = LoadInstance
+	}
+	// The caller's preflight snapshot may have changed while startup waited for
+	// the locks. Read and verify the authority again while apply is excluded.
+	instance, err = reload(ctx, supervisor.DataDir)
+	if err != nil {
+		return fmt.Errorf("load runtime state under startup locks: %w", err)
+	}
 	coordinator := supervisor.Network
 	if coordinator == nil {
 		coordinator, err = networkcontrol.New(networkcontrol.Config{
@@ -91,10 +101,6 @@ func (supervisor Supervisor) Run(ctx context.Context, hup <-chan os.Signal, inst
 		if err != nil {
 			return err
 		}
-	}
-	reload := supervisor.ReloadInstance
-	if reload == nil {
-		reload = LoadInstance
 	}
 	var processes *runtimeProcesses
 	var api *childProcess
