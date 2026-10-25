@@ -10,14 +10,16 @@ cd /
 /tmp/my-vpn version --short
 export PATH="$root/bin:$PATH"
 ovpn version --short
-if /tmp/my-vpn >/tmp/no-config.log 2>&1; then
+/tmp/my-vpn | grep -F "Command tree:"
+[ ! -e "$root/data/state.db" ]
+if /tmp/my-vpn server run >/tmp/no-config.log 2>&1; then
   echo 'missing config accepted' >&2
   exit 1
 fi
 grep -Fq config.example.yaml /tmp/no-config.log
 cp "$root/config/config.example.yaml" "$root/config/config.yaml"
 sed -i 's/vpn.example.com/127.0.0.1/' "$root/config/config.yaml"
-# No arguments must initialize empty state and start the real server.
+# Explicit run initializes empty state and starts the real server.
 pid=''
 client_pid=''
 cleanup() {
@@ -32,7 +34,7 @@ cleanup() {
 }
 trap cleanup EXIT
 iptables -N unrelated_fixture
-/tmp/my-vpn >/tmp/portable.log 2>&1 &
+/tmp/my-vpn server run >/tmp/portable.log 2>&1 &
 pid=$!
 for _ in $(seq 1 60); do
   if ovpn runtime health >/dev/null 2>&1; then break; fi
@@ -81,7 +83,7 @@ if grep -Fq '/tmp/portable vpn' "$root/data/server/server.conf"; then
   echo 'old program path remains' >&2
   exit 1
 fi
-"$root/ovpn" >/tmp/portable.log 2>&1 &
+"$root/ovpn" server run >/tmp/portable.log 2>&1 &
 pid=$!
 for _ in $(seq 1 60); do
   if ovpn runtime health >/dev/null 2>&1; then break; fi

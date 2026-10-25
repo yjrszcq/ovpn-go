@@ -67,9 +67,6 @@ func Prepare(executable, invoked string, args, environment []string) (Invocation
 	case "ovpn", "ovpn-hook", "ovpn-broker", "ovpn-api":
 		if name == "ovpn" {
 			binary = filepath.Join(root, "runtime", "bin", "ovpn-core")
-			if len(args) == 0 {
-				env["OVPN_EXEC_MODE"] = "entrypoint"
-			}
 		} else if name == "ovpn-hook" {
 			binary = filepath.Join(root, "runtime", "bin", "ovpn-core")
 			env["OVPN_EXEC_MODE"] = "hook"

@@ -41,7 +41,7 @@ var rootCommand = command{
 				[]string{"Requires an empty data directory and either valid declarative YAML or one-time bootstrap environment."},
 				"ovpn server init"),
 			leaf("run", "supervise OpenVPN and its broker", "ovpn server run",
-				[]string{"Uses the last applied SQLite configuration; YAML drift is reported but not applied."},
+				[]string{"Initializes empty data from the configuration, then runs in the foreground.", "Uses the last applied SQLite configuration; YAML drift is reported but not applied."},
 				"ovpn server run"),
 			leaf("render", "render the applied server configuration", "ovpn server render [--output|-o FILE|-]",
 				[]string{"Writes to stdout by default. Use '-' to request stdout explicitly."},

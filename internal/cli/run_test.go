@@ -288,8 +288,10 @@ func TestServerRunUsageAndMissingState(t *testing.T) {
 		t.Fatalf("run usage code=%d stderr=%q", code, stderr)
 	}
 	t.Setenv("OVPN_DATA_DIR", filepath.Join(t.TempDir(), "missing"))
+	t.Setenv("OVPN_BUNDLE_ROOT", t.TempDir())
+	t.Setenv("OVPN_CONFIG_FILE", filepath.Join(t.TempDir(), "config.yaml"))
 	code, stdout, stderr = run("server", "run")
-	if code != 78 || stdout != "" || !strings.Contains(stderr, "operation recovery was refused") {
+	if code != 78 || stdout != "" || !strings.Contains(stderr, "config.example.yaml") {
 		t.Fatalf("missing state code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }
@@ -591,5 +593,34 @@ func TestConfigValidateJSONError(t *testing.T) {
 	code, stdout, stderr := run("config", "validate", "--json")
 	if code != 65 || stdout != "" || !strings.Contains(stderr, `"kind":"invalid_config"`) {
 		t.Fatalf("validate error code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
+func TestBareCLILeavesEmptyDataUntouched(t *testing.T) {
+	data := filepath.Join(t.TempDir(), "missing")
+	t.Setenv("OVPN_DATA_DIR", data)
+	code, stdout, stderr := run()
+	if code != 0 || stderr != "" || !strings.Contains(stdout, "Command tree:") {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if _, err := os.Stat(data); !os.IsNotExist(err) {
+		t.Fatalf("bare CLI wrote data: %v", err)
+	}
+}
+
+func TestServerRunDoesNotInitializePartialData(t *testing.T) {
+	data := t.TempDir()
+	marker := filepath.Join(data, "partial")
+	if err := os.WriteFile(marker, []byte("retain"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OVPN_DATA_DIR", data)
+	code, _, stderr := run("server", "run")
+	if code != 78 || !strings.Contains(stderr, "operation recovery was refused") {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	content, err := os.ReadFile(marker)
+	if err != nil || string(content) != "retain" {
+		t.Fatalf("partial state changed: %q %v", content, err)
 	}
 }

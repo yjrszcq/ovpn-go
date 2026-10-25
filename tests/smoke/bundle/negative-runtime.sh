@@ -11,7 +11,7 @@ docker run --rm --cap-add NET_ADMIN --entrypoint sh "$image" -ec '
  # Exercise the userspace TUN path even when the host has an available DCO module.
  printf "\ndisable-dco\n" >>/opt/ovpn/runtime/share/templates/openvpn-2.7/server.conf.tpl
  ovpn server init
- if timeout 20s ovpn >/tmp/no-tun.log 2>&1; then echo "missing TUN accepted"; exit 1; fi
+ if timeout 20s ovpn server run >/tmp/no-tun.log 2>&1; then echo "missing TUN accepted"; exit 1; fi
  cat /tmp/no-tun.log
  grep -Ei "TUN|/dev/net/tun" /tmp/no-tun.log
  if iptables-save | grep -E "OVPN_|ovpn:"; then echo "failed start left instance rules"; exit 1; fi

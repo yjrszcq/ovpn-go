@@ -21,12 +21,15 @@ func TestRelocationAndOverrides(t *testing.T) {
 	if err := os.Symlink(filepath.Join(root, "ovpn"), link); err != nil {
 		t.Fatal(err)
 	}
-	inv, err := Prepare(link, "ovpn", nil, []string{"PATH=/usr/bin", "OVPN_DATA_DIR=/custom/data"})
+	inv, err := Prepare(link, "ovpn", nil, []string{"PATH=/usr/bin", "OVPN_DATA_DIR=/custom/data", "OVPN_EXEC_MODE=entrypoint"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	env := strings.Join(inv.Env, "\n")
-	for _, want := range []string{"OVPN_DATA_DIR=/custom/data", "OVPN_EXEC_MODE=entrypoint", "OVPN_HOOK_BIN=" + filepath.Join(root, "bin", "ovpn-hook")} {
+	if strings.Contains(env, "OVPN_EXEC_MODE=") {
+		t.Fatal("CLI inherited entrypoint mode")
+	}
+	for _, want := range []string{"OVPN_DATA_DIR=/custom/data", "OVPN_HOOK_BIN=" + filepath.Join(root, "bin", "ovpn-hook")} {
 		if !strings.Contains(env, want) {
 			t.Fatalf("missing %s in %s", want, env)
 		}

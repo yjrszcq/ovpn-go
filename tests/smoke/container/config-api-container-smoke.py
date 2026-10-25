@@ -29,7 +29,7 @@ def wait(check):
         time.sleep(0.25)
     raise AssertionError('Readiness timeout')
 try:
-    docker('run', '-d', '--name', name, '--cap-add', 'NET_ADMIN', '--device', '/dev/net/tun', '-v', str(root / 'config') + ':/etc/ovpn-conf', '-v', str(root / 'data') + ':/etc/openvpn', '-e', 'OVPN_API_LISTEN=0.0.0.0:11940', '-e', 'OVPN_API_CORS_ORIGINS=*', '-p', '127.0.0.1::11940', '-p', '127.0.0.1::11941', image)
+    docker('run', '-d', '--name', name, '--cap-add', 'NET_ADMIN', '--device', '/dev/net/tun', '-v', str(root / 'config') + ':/etc/ovpn-conf', '-v', str(root / 'data') + ':/etc/openvpn', '-e', 'OVPN_API_LISTEN=0.0.0.0:11940', '-e', 'OVPN_API_CORS_ORIGINS=*', '-p', '127.0.0.1::11940', '-p', '127.0.0.1::11941', image, 'server', 'run')
     wait(lambda: cli('runtime', 'health'))
     ports = [int(docker('port', name, f'{port}/tcp').strip().rsplit(':', 1)[1]) for port in [11940, 11941]]
     base = 'http://127.0.0.1:' + str(ports[0])

@@ -228,6 +228,21 @@ func runServerRun(args []string, stdout, stderr io.Writer) int {
 	}
 	dataDir := environmentOr("OVPN_DATA_DIR", initialize.DefaultDataDir)
 	runtimeDir := environmentOr("OVPN_RUNTIME_DIR", initialize.DefaultRuntimeDir)
+	empty, err := dataDirectoryEmpty(dataDir)
+	if err != nil {
+		return writeError(stderr, apperror.Wrap(apperror.ExitPolicy, "runtime_state_refused", "inspect runtime data directory", err))
+	}
+	if empty {
+		if root := os.Getenv("OVPN_BUNDLE_ROOT"); root != "" {
+			path := environmentOr("OVPN_CONFIG_FILE", configservice.DefaultPath)
+			if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+				return writeError(stderr, apperror.New(apperror.ExitPolicy, "configuration_missing", "copy "+filepath.Join(root, "config", "config.example.yaml")+" to "+path+", edit the public endpoint, then run ovpn server run"))
+			}
+		}
+		if code := runServerInit(nil, stdout, stderr); code != int(apperror.ExitSuccess) {
+			return code
+		}
+	}
 	if _, err := recoveryservice.RecoverOperations(context.Background(), dataDir); err != nil {
 		if errors.Is(err, artifact.ErrLocked) || errors.Is(err, storesqlite.ErrBusy) {
 			return writeError(stderr, apperror.Wrap(apperror.ExitTemporary, "operation_recovery_busy", "interrupted operation recovery is busy", err))
@@ -287,22 +302,6 @@ func runtimeDependencyBinaries(apiEnabled bool) (openvpnBinary, brokerBinary, ap
 // container command start the Go runtime.
 func RunEntrypoint(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		if root := os.Getenv("OVPN_BUNDLE_ROOT"); root != "" {
-			path := environmentOr("OVPN_CONFIG_FILE", configservice.DefaultPath)
-			if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-				return writeError(stderr, apperror.New(apperror.ExitPolicy, "configuration_missing", "copy "+filepath.Join(root, "config", "config.example.yaml")+" to "+path+", edit the public endpoint, then start ovpn again"))
-			}
-		}
-		dataDir := environmentOr("OVPN_DATA_DIR", initialize.DefaultDataDir)
-		empty, err := dataDirectoryEmpty(dataDir)
-		if err != nil {
-			return writeError(stderr, apperror.Wrap(apperror.ExitPolicy, "runtime_state_refused", "inspect runtime data directory", err))
-		}
-		if empty {
-			if code := runServerInit(nil, stdout, stderr); code != int(apperror.ExitSuccess) {
-				return code
-			}
-		}
 		return Run([]string{"server", "run"}, stdout, stderr)
 	}
 	base := filepath.Base(args[0])

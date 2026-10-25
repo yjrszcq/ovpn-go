@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+server_args=()
+if [ "${OVPN_E2E_EXPLICIT_RUN:-0}" = 1 ]; then server_args=(server run); fi
 
 # The traffic fixtures use fixed subnets. Serialize concurrent distribution runs
 # so Docker's address-pool overlap protection does not affect the test result.
@@ -141,7 +143,7 @@ YAML
     --device /dev/net/tun \
     -v "$data_dir:/etc/openvpn" \
     -v "$config_dir:/etc/ovpn-conf" \
-    "$IMAGE" >"$protocol_dir/server.id"
+    "$IMAGE" "${server_args[@]}" >"$protocol_dir/server.id"
   active_containers+=("$server")
   docker run -d --name "$target" --network "$network" --ip "$target_address" \
     -v "$data_dir:/etc/openvpn:ro" --entrypoint openssl "$IMAGE" \
