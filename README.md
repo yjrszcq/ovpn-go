@@ -39,6 +39,8 @@ sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/ma
 
 Choose a language (English by default), then Install, Update or Uninstall (Install by default). Enter your public hostname/IP; press Enter to accept defaults for the directory, version, port and other settings. Configuration is written once after confirmation; you then choose whether to start the service and enable it at boot. After Ctrl-C, rerun and select the same action to resume at the unfinished step.
 
+Without arguments, `ovpn` shows the command tree. Use `sudo ovpn server run` for foreground startup, or systemd/OpenRC for long-running service management. First startup initializes automatically; no manual init/apply is needed. If installation does not start the service and data is still uninitialized, edit configuration before starting. Later changes require `ovpn config edit --apply` or `config apply`.
+
 Allow the VPN port through host/cloud firewalls. Use the same command for updates and uninstalling; uninstall keeps configuration and data by default. See the [native Linux guide](docs/en/v4/native-linux.md).
 
 ### Docker
@@ -106,7 +108,7 @@ In the repository's complete Compose file, `openvpn-maintenance` belongs to the 
 
 Live CLI examples use `docker exec openvpn` because the Compose service fixes the container name as `openvpn`. If you change `container_name`, substitute the actual container name.
 
-The entrypoint initializes only an empty data directory and requires either a valid YAML file or enabled bootstrap environment for a new instance. Environment bootstrap writes the canonical YAML first; initialization then creates the SQLite database, PKI, server identity, CRL, tls-crypt key, and derived runtime files as one staged operation.
+`server run` (called by the container entrypoint at startup) initializes only an empty data directory and requires either a valid YAML file or enabled bootstrap environment for a new instance. Environment bootstrap writes the canonical YAML first; initialization then creates the SQLite database, PKI, server identity, CRL, tls-crypt key, and derived runtime files as one staged operation.
 
 YAML is the desired configuration; SQLite stores the last operator-confirmed applied revision. If YAML later becomes missing or differs from that revision, `server run` warns and continues with the applied SQLite snapshot. It never applies configuration implicitly.
 
@@ -162,7 +164,7 @@ Paths and editor defaults below describe Docker. Native defaults are relative to
 
 ### One-time environment bootstrap
 
-This workflow is for Docker. The native no-argument launcher requires an existing configuration file; copy and edit its bundled example before starting.
+This workflow is for Docker. Native first startup with `ovpn server run` requires an existing configuration file; copy and edit its bundled example before starting.
 
 These variables are read only while initializing an empty instance with `OVPN_BOOTSTRAP_FROM_ENV=true`. They produce the first canonical YAML file. After initialization they are ignored with a warning and never overwrite YAML or SQLite; set the switch to `false` after the first successful start.
 

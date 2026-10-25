@@ -38,11 +38,11 @@ maintenance 服务的 entrypoint 已经是 `ovpn`，因此 `<command>` 直接从
 
 `OVPN_MAINTENANCE=true` 授权离线迁移。配置和批量地址编辑器依次取 `--editor/-e`、`OVPN_EDITOR`、`EDITOR`，最后使用 `nano`。Docker 镜像内置 `nano`、`vim` 和 `vi`，裸机压缩包提供 `nano` 和 BusyBox `vi`；其他编辑器必须在相应部署环境中可用。外部二进制与模板覆盖变量只用于测试和开发，不属于常规部署配置。
 
-`ovpn client`、`ovpn state`、`ovpn runtime` 是 `client list`、`state doctor`、`runtime status` 的安全快捷方式，并继承对应子命令的参数。例如 `ovpn client -d -j` 等同于 `ovpn client list -d -j`。顶层 `-v` 只输出项目版本，`-V` 与 `--version` 输出完整版本报告。Docker 内执行无参数的 `docker exec openvpn ovpn` 会显示完整展开命令树；裸机 `ovpn` 启动器无参数执行会启动服务，并使用已有配置初始化空数据，缺少配置时拒绝启动。两种部署均可使用 `ovpn -h` 查看根帮助。
+`ovpn client`、`ovpn state`、`ovpn runtime` 是 `client list`、`state doctor`、`runtime status` 的安全快捷方式，并继承对应子命令的参数。例如 `ovpn client -d -j` 等同于 `ovpn client list -d -j`。顶层 `-v` 只输出项目版本，`-V` 与 `--version` 输出完整版本报告。Docker 内执行 `docker exec openvpn ovpn` 和裸机执行 `ovpn`，无参数时均显示完整命令树，不初始化或启动服务。使用 `ovpn server run` 在前台启动；`ovpn -h` 显示根帮助。Docker/Compose 启动容器仍会自动启动服务。
 
 ## 一次性环境变量初始化
 
-全新空 Docker 实例可以根据 Compose 环境变量生成第一份 YAML。裸机版无参数启动要求 YAML 已存在，应复制包内示例，不使用这里的 bootstrap 流程。这只是初始化输入，不是第二套长期配置模式。设置 `OVPN_BOOTSTRAP_FROM_ENV=true`，并提供两个必填值：
+全新空 Docker 实例可以根据 Compose 环境变量生成第一份 YAML。裸机首次执行 `server run` 要求 YAML 已存在，应复制包内示例，不使用这里的 bootstrap 流程。这只是初始化输入，不是第二套长期配置模式。设置 `OVPN_BOOTSTRAP_FROM_ENV=true`，并提供两个必填值：
 
 | 环境变量 | YAML 字段 | 必填 |
 |---|---|---|
@@ -193,7 +193,7 @@ ovpn server init
 
 从有效 YAML 初始化空的 schema 4 数据目录。在 staging 中创建并验证 SQLite、PKI、服务端凭据、CRL、tls-crypt、配置和派生文件后统一安装。非空目录或不支持的旧格式会被拒绝。
 
-Docker entrypoint 和裸机版无参数启动只初始化空数据目录；裸机版还要求配置文件已存在。显式 `server run` 不会为缺失状态执行初始化。
+初始化会将 YAML 写入数据库，形成 applied revision 1，无需额外执行 `config apply`，且不会启动服务。`server run`（包括 Docker entrypoint、systemd/OpenRC 启动）会自动初始化空数据目录；裸机首次初始化要求配置文件已存在。已有的非空或损坏状态不会被视为空实例重新创建。
 
 ### `ovpn server run`
 
@@ -202,6 +202,8 @@ Docker entrypoint 和裸机版无参数启动只初始化空数据目录；裸�
 ```text
 ovpn server run
 ```
+
+配置就绪且数据为空时先初始化，再在当前终端前台运行；裸机首次缺少配置时会提示复制、编辑包内示例并退出。初始化后继续使用 applied 快照。重复启动同一实例会因实例锁被拒绝，不会接管已有进程。长期后台运行使用 [systemd/OpenRC](native-linux.md#手工注册系统服务) 或 Docker；未提供 daemon、start/stop/restart 或服务注册 CLI。
 
 加载 applied SQLite 快照，恢复中断 operation，reconcile IPv4 forwarding/防火墙，并监督 OpenVPN 与 Go broker。applied 配置中 `api.enabled` 为 true 时还会监督 `ovpn-api`；API 设置通过配置 apply 生效。TERM/INT 停止所有已启用子进程，HUP 只转发给 OpenVPN。
 

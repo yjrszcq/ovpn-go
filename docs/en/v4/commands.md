@@ -38,11 +38,11 @@ Default paths (`<root>` is the native extraction directory):
 
 `OVPN_MAINTENANCE=true` authorizes offline migration. The configuration and batch address editor is selected from `--editor/-e`, `OVPN_EDITOR`, `EDITOR`, then `nano`. The Docker image includes `nano`, `vim`, and `vi`; the native archive includes `nano` and BusyBox `vi`. Any additional editor must be available in the deployment environment. Binary/template overrides are test and development interfaces, not normal deployment configuration.
 
-`ovpn client`, `ovpn state`, and `ovpn runtime` are safe shortcuts for `client list`, `state doctor`, and `runtime status`, including their options. For example, `ovpn client -d -j` is equivalent to `ovpn client list -d -j`. At the top level, `-v` prints only the project version while `-V` and `--version` print the full version report. In Docker, running `docker exec openvpn ovpn` without arguments prints the fully expanded command tree. The native `ovpn` launcher without arguments starts the server and initializes empty data from an existing configuration; missing configuration is refused. Use `ovpn -h` for root help in either deployment.
+`ovpn client`, `ovpn state`, and `ovpn runtime` are safe shortcuts for `client list`, `state doctor`, and `runtime status`, including their options. For example, `ovpn client -d -j` is equivalent to `ovpn client list -d -j`. At the top level, `-v` prints only the project version while `-V` and `--version` print the full version report. Without arguments, both `docker exec openvpn ovpn` and native `ovpn` print the command tree without initializing or starting a service. Use `ovpn server run` for foreground startup and `ovpn -h` for root help. Docker/Compose container startup still starts the service automatically.
 
 ## One-time environment bootstrap
 
-A new empty Docker instance can generate its first YAML file from Compose environment variables. The native no-argument launcher requires an existing YAML file; use the bundled example instead of this bootstrap workflow. This is an initialization input, not a second configuration mode. Set `OVPN_BOOTSTRAP_FROM_ENV=true` and provide the two required values:
+A new empty Docker instance can generate its first YAML file from Compose environment variables. Native first startup with `server run` requires an existing YAML file; use the bundled example instead of this bootstrap workflow. This is an initialization input, not a second configuration mode. Set `OVPN_BOOTSTRAP_FROM_ENV=true` and provide the two required values:
 
 | Environment variable | YAML field | Required |
 |---|---|---|
@@ -193,7 +193,7 @@ ovpn server init
 
 Initializes an empty schema 4 data directory from valid YAML. It stages and validates SQLite, PKI, server credentials, CRL, tls-crypt, configuration, and derived files before installation. A non-empty or unsupported legacy directory is refused.
 
-The Docker entrypoint and native no-argument launcher initialize only empty data directories. The native launcher first requires a configuration file. Explicit `server run` does not initialize missing state.
+Initialization records the YAML in SQLite as applied revision 1, so no additional `config apply` is required; it does not start a service. `server run`, including Docker entrypoint and systemd/OpenRC startup, automatically initializes empty data. Native first initialization requires an existing configuration file. Non-empty or corrupt state is never recreated as an empty instance.
 
 ### `ovpn server run`
 
@@ -202,6 +202,8 @@ Syntax:
 ```text
 ovpn server run
 ```
+
+With valid configuration and empty data, initializes first, then runs in the foreground. Missing native configuration at first startup produces copy/edit instructions and exits. Initialized instances keep their applied snapshot. A duplicate startup is refused by the instance lock; it does not attach to an existing process. Use [systemd/OpenRC](native-linux.md#manual-service-registration) or Docker for long-running service management; no daemon, start/stop/restart or service registration CLI is provided.
 
 Loads the applied SQLite snapshot, recovers interrupted operations, reconciles IPv4 forwarding/firewall state, and supervises OpenVPN plus the Go broker. When applied `api.enabled` is true it also supervises `ovpn-api`; API setting changes take effect through configuration apply. TERM and INT stop all enabled children, while HUP is forwarded to OpenVPN.
 

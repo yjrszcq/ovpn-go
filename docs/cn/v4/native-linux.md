@@ -47,10 +47,23 @@ sudo rc-service ovpn start
 前台运行：
 
 ```bash
-sudo /opt/ovpn/ovpn
+sudo /opt/ovpn/ovpn server run
 ```
 
-无参数执行会启动服务；数据为空时使用已有配置初始化。缺少配置时提示操作方法并停止。请勿与托管服务同时启动前台实例。SIGTERM 或 Ctrl-C 会停止子进程并清理实例网络规则。
+无参数 `ovpn` 显示命令树，不写入初始化状态。`server run` 在当前终端前台运行；数据为空时使用已有配置初始化，首次缺少配置时提示操作方法并退出。同一实例只能运行一份，前台和托管启动共用实例锁。SIGTERM 或 Ctrl-C 会停止子进程并清理实例网络规则。前台进程停止后重新运行即可重启；托管服务使用对应的 stop/restart 命令。
+
+### 首次初始化与配置应用
+
+`server init` 会创建 PKI、数据库和派生文件，并将初始 YAML 保存为 applied revision 1，但不启动服务，也不需要额外 apply。通常无需手动 init，首次 `server run` 或系统服务启动会自动完成。
+
+| 场景 | 操作 |
+| --- | --- |
+| 安装后立即启动 | 自动初始化并启动，无需 init/apply |
+| 安装后暂不启动，尚未初始化 | 编辑配置后直接启动，无需 init/apply |
+| 已手动 init，随后编辑 YAML，即使还没运行过服务 | 使用 `sudo ovpn config edit --apply` 或 `config plan` / `config apply` |
+| 已有实例停止期间编辑 YAML | 应用变更后再启动；仅重启仍使用原 applied 快照 |
+
+安装时选择暂不启动，只保存配置和注册服务。判断是否需要 apply 的依据是是否已初始化。首次初始化后，启动不会隐式应用 YAML 变化；缺失或无效的 YAML 会给出警告，已有实例继续使用 applied 快照。数据库损坏或状态不完整会报错，不会重新初始化覆盖数据。
 
 ## 文件与日常命令
 
@@ -76,7 +89,7 @@ CLI、可选 REST API 和已有 `OVPN_*` 覆盖继续有效。覆盖按进程生
 
 ## API 与离线维护
 
-API 默认关闭。安装向导可以配置 API；之后运行 `sudo ovpn config edit -a`，修改以下 YAML 并确认应用：
+API 默认关闭。首次初始化前直接编辑 YAML；以下 apply 操作用于已初始化的实例。安装向导可以配置 API；之后运行 `sudo ovpn config edit -a`，修改以下 YAML 并确认应用：
 
 ```yaml
 api:
@@ -108,7 +121,9 @@ sudo env OVPN_MAINTENANCE=true /opt/ovpn/ovpn migrate plan
 sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/install.sh')"
 ```
 
-重新运行脚本并选择“更新”。更新器先下载验证，再锁定安装目录。服务原先运行时，会停止、保存快照、更新并重启检查健康；原先停止则继续停止。用户配置、证书、数据库、客户端配置、日志、权限和开机启动状态会保留。替换或健康检查失败时恢复旧程序和快照。更新中断后，再次执行更新器即可恢复事务；若 `.update-backup/` 仍保留，表示恢复需要处理，请在实例恢复健康前保留它。
+重新运行脚本并选择“更新”。更新器先下载验证，再锁定安装目录。服务原先运行时，会停止、保存快照、更新并重启检查健康；原先停止则继续停止。用户配置、证书、数据库、客户端配置、日志、权限和开机启动状态会保留。替换或健康检查失败时恢复旧程序、原服务定义和数据快照。更新中断后，再次执行更新器即可恢复事务；若 `.update-backup/` 仍保留，表示恢复需要处理，请在实例恢复健康前保留它。
+
+更新同时迁移本实例的服务入口至 `ovpn server run`；原服务定义与程序、数据一起纳入恢复快照。同版本更新和重新安装也会修复旧入口。更新前运行的服务恢复运行，停止的服务保持停止，开机启动状态不变。
 
 在交互中确认安装目录，选择最新稳定版或填写已发布版本号。
 
@@ -158,13 +173,64 @@ tar -xzf openvpn-server-X.Y.Z-linux-amd64.tar.gz
 cd openvpn-server
 cp config/config.example.yaml config/config.yaml
 # 启动前编辑 config/config.yaml。
-sudo ./ovpn
+sudo ./ovpn server run
 ```
 
 手工前台运行不需要服务管理器。需要通过 PATH 使用 CLI 时，添加解压根目录，例如 `export PATH="/opt/ovpn:$PATH"`，并保持整个目录完整。支持绝对路径、符号链接、不同工作目录和含空格的路径。`sudo` 可能重置 PATH，此时请使用程序绝对路径或安装器创建的 `/usr/local/bin/ovpn` 链接。
 
 初始化前可直接移动目录。已初始化的实例需要先停止，再移动完整目录，然后执行 `sudo /new/path/ovpn repair apply --yes`，重建含绝对路径的派生文件后再启动。仍指向旧位置的服务定义和命令链接也需要更新。安装器管理的更新操作使用原先注册的目录和服务；手工移动后需要先同步调整这些路径。
 
-### 安装试运行
+## 手工注册系统服务
+
+手工解压用户可使用包内 `runtime/share/services/` 的示例（仓库中为 `examples/services/`）。示例假定安装目录为 `/opt/ovpn`；使用其他目录时，先修改示例中所有绝对路径，再复制。先复制并编辑 `config/config.example.yaml` 为 `config/config.yaml`。不要与同一实例的前台进程同时运行；已由安装器注册的服务无需重复注册。
+
+### systemd
+
+```bash
+sudo cp /opt/ovpn/runtime/share/services/systemd/ovpn.service /etc/systemd/system/ovpn.service
+sudo systemctl daemon-reload
+sudo systemctl start ovpn
+sudo systemctl status ovpn
+sudo systemctl restart ovpn
+sudo systemctl stop ovpn
+sudo systemctl enable ovpn
+sudo systemctl disable ovpn
+sudo journalctl -u ovpn -n 50
+```
+
+停止并注销服务，保留程序和所有实例数据：
+
+```bash
+sudo systemctl stop ovpn
+sudo systemctl disable ovpn
+sudo rm /etc/systemd/system/ovpn.service
+sudo systemctl daemon-reload
+```
+
+### OpenRC
+
+```bash
+sudo cp /opt/ovpn/runtime/share/services/openrc/ovpn /etc/init.d/ovpn
+sudo chmod 755 /etc/init.d/ovpn
+sudo rc-service ovpn start
+sudo rc-service ovpn status
+sudo rc-service ovpn restart
+sudo rc-service ovpn stop
+sudo rc-update add ovpn default
+sudo rc-update del ovpn default
+sudo tail -n 50 /opt/ovpn/run/service.log /opt/ovpn/run/service-error.log
+```
+
+停止并注销服务，保留程序和所有实例数据：
+
+```bash
+sudo rc-service ovpn stop
+sudo rc-update del ovpn default
+sudo rm /etc/init.d/ovpn
+```
+
+两套服务均明确执行 `ovpn server run`。后台托管由服务管理器完成，不向程序添加 daemon 参数。OpenVPN 自身日志位于 `logs/openvpn.log`。
+
+## 安装试运行
 
 在仓库目录运行 `bash install.sh --dry-run`，无需 sudo。保留语言、操作和配置交互，展示草稿及将执行的操作，不下载、不写入安装目录、配置或续填记录，也不操作服务。试运行不验证发布附件或运行健康；退出后不会保存答案。更新、卸载预览同样从操作菜单选择。

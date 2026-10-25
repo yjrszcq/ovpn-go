@@ -47,10 +47,23 @@ sudo rc-service ovpn start
 For foreground operation:
 
 ```bash
-sudo /opt/ovpn/ovpn
+sudo /opt/ovpn/ovpn server run
 ```
 
-No arguments starts the service and initializes empty data using the existing configuration. Missing configuration produces instructions and stops. Do not run a foreground instance alongside the managed service. SIGTERM or Ctrl-C stops child processes and cleans instance network rules.
+Without arguments, `ovpn` shows the command tree without initialization. `server run` runs in the current terminal and initializes empty data from existing configuration; missing configuration at first startup produces instructions and exits. One instance can run only once: foreground and managed startup share the instance lock. SIGTERM or Ctrl-C stops child processes and cleans instance network rules. Restart a foreground process by stopping and running it again; use the service manager’s stop/restart commands for managed operation.
+
+### First initialization and configuration application
+
+`server init` creates PKI, the database and derived files, and saves the initial YAML as applied revision 1. It does not start the service and needs no extra apply. Manual init is normally unnecessary: the first `server run` or system service startup handles it automatically.
+
+| Situation | Action |
+| --- | --- |
+| Start immediately after installation | Automatically initializes and starts; no init/apply needed |
+| Do not start after installation; no initialization yet | Edit configuration, then start; no init/apply needed |
+| Manually initialized, then edited YAML, even before ever running the service | Use `sudo ovpn config edit --apply` or `config plan` / `config apply` |
+| Edited YAML while an existing instance was stopped | Apply before starting; restarting alone keeps the previous applied snapshot |
+
+Choosing not to start during installation only saves configuration and registers the service. Whether apply is needed depends on whether initialization has occurred. After initialization, startup never implicitly applies YAML changes; missing or invalid YAML produces a warning and the existing instance keeps its applied snapshot. Corrupt or incomplete database state is refused without recreating the instance.
 
 ## Files and everyday commands
 
@@ -76,7 +89,7 @@ The CLI and optional REST API retain their existing interfaces and `OVPN_*` over
 
 ## API and offline maintenance
 
-The API is disabled by default. Configure it in the installer or run `sudo ovpn config edit -a`, edit the following YAML and confirm application:
+The API is disabled by default. Before first initialization, edit YAML directly; the apply commands below are for initialized instances. Configure it in the installer or run `sudo ovpn config edit -a`, edit the following YAML and confirm application:
 
 ```yaml
 api:
@@ -108,9 +121,11 @@ sudo env OVPN_MAINTENANCE=true /opt/ovpn/ovpn migrate plan
 sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/main/install.sh')"
 ```
 
-Rerun the script and select Update. The updater downloads and verifies first, then locks the installation. A running service is stopped, snapshotted, updated and restarted with a health check; a stopped service stays stopped. Your configuration, certificates, database, profiles, logs, permissions and service enablement are retained. A failed replacement or health check restores the previous program and snapshot. After an interrupted update, rerun the updater to recover the transaction. A retained `.update-backup/` means recovery needs attention; preserve it until the instance is healthy.
+Rerun the script and select Update. The updater downloads and verifies first, then locks the installation. A running service is stopped, snapshotted, updated and restarted with a health check; a stopped service stays stopped. Your configuration, certificates, database, profiles, logs, permissions and service enablement are retained. A failed replacement or health check restores the previous program, service definition and data snapshot. After an interrupted update, rerun the updater to recover the transaction. A retained `.update-backup/` means recovery needs attention; preserve it until the instance is healthy.
 
 Confirm the installation directory and select the latest stable release or enter a published version in the prompts.
+
+Updates also migrate this installation’s service entrypoint to `ovpn server run`. Same-version updates and repeated installation repair old service entrypoints too.
 
 Updates require the same data schema and refuse downgrades. Repeating installation or updating to the installed version preserves state. Stop manually launched instances before updating; the updater refuses to terminate them. Keep independent backups as described in the [operations guide](operations.md).
 
@@ -158,13 +173,64 @@ tar -xzf openvpn-server-X.Y.Z-linux-amd64.tar.gz
 cd openvpn-server
 cp config/config.example.yaml config/config.yaml
 # Edit config/config.yaml before starting.
-sudo ./ovpn
+sudo ./ovpn server run
 ```
 
 No service manager is required for manual foreground operation. To use the CLI through PATH, add the extraction root, for example `export PATH="/opt/ovpn:$PATH"`; keep the whole directory together. Absolute paths, symlinks, different working directories and paths containing spaces are supported. `sudo` may reset PATH; use the absolute executable path or the installer-created `/usr/local/bin/ovpn` link in that case.
 
 Before initialization, move the directory freely. For an initialized instance, stop it, move the complete directory, then run `sudo /new/path/ovpn repair apply --yes` to regenerate derived absolute paths before restarting. Update any service definition and command symlink that still points to the old location. The installer-managed updater targets the directory and service originally registered; manual relocations require adjusting those paths first.
 
-### Preview installation
+## Manual service registration
+
+For manual extraction, use the examples in `runtime/share/services/` (repository: `examples/services/`). They assume `/opt/ovpn`; edit every absolute path before copying if you use another directory. Copy `config/config.example.yaml` to `config/config.yaml` and edit it first. Do not run the same instance in the foreground concurrently. Installer-registered services need no additional registration.
+
+### systemd
+
+```bash
+sudo cp /opt/ovpn/runtime/share/services/systemd/ovpn.service /etc/systemd/system/ovpn.service
+sudo systemctl daemon-reload
+sudo systemctl start ovpn
+sudo systemctl status ovpn
+sudo systemctl restart ovpn
+sudo systemctl stop ovpn
+sudo systemctl enable ovpn
+sudo systemctl disable ovpn
+sudo journalctl -u ovpn -n 50
+```
+
+Stop and unregister the service while retaining the program and all instance data:
+
+```bash
+sudo systemctl stop ovpn
+sudo systemctl disable ovpn
+sudo rm /etc/systemd/system/ovpn.service
+sudo systemctl daemon-reload
+```
+
+### OpenRC
+
+```bash
+sudo cp /opt/ovpn/runtime/share/services/openrc/ovpn /etc/init.d/ovpn
+sudo chmod 755 /etc/init.d/ovpn
+sudo rc-service ovpn start
+sudo rc-service ovpn status
+sudo rc-service ovpn restart
+sudo rc-service ovpn stop
+sudo rc-update add ovpn default
+sudo rc-update del ovpn default
+sudo tail -n 50 /opt/ovpn/run/service.log /opt/ovpn/run/service-error.log
+```
+
+Stop and unregister the service while retaining the program and all instance data:
+
+```bash
+sudo rc-service ovpn stop
+sudo rc-update del ovpn default
+sudo rm /etc/init.d/ovpn
+```
+
+Both service definitions explicitly execute `ovpn server run`. The service manager handles background operation; no daemon option is passed to the program. OpenVPN’s own logs are in `logs/openvpn.log`.
+
+## Preview installation
 
 From the repository, run `bash install.sh --dry-run` without sudo. It retains language, action and configuration prompts and shows the draft and intended operations, without downloading, writing installation/configuration/resume state or changing services. It does not verify Release assets or runtime health, and answers are discarded on exit. Select Update or Uninstall in the same preview menu.

@@ -39,6 +39,8 @@ sudo bash -c "$(curl -fsSL 'https://raw.githubusercontent.com/yjrszcq/ovpn-go/ma
 
 先选择语言（默认英文），再选择安装、更新或卸载（默认安装）。按提示填写公网域名或 IP；目录、版本、端口等均可直接回车使用默认值。配置确认后一次性写入，并询问是否启动服务和设置开机启动。中途按 Ctrl-C，重新运行并选择相同操作即可从未完成的步骤继续。
 
+无参数 `ovpn` 仅显示命令树；前台启动使用 `sudo ovpn server run`，长期运行交给 systemd/OpenRC。首次启动自动初始化，无需手动 init/apply；若安装后暂不启动且尚未初始化，可先编辑配置再启动。初始化后的变更需使用 `ovpn config edit --apply` 或 `config apply`。
+
 请在宿主及云防火墙放行 VPN 端口。更新、卸载也使用同一条命令，卸载默认保留配置与数据。详见 [Linux 裸机指南](docs/cn/v4/native-linux.md)。
 
 ### Docker
@@ -104,7 +106,7 @@ docker compose up -d
 
 在线 CLI 示例使用 `docker exec openvpn`，因为 Compose 将容器名固定为 `openvpn`。如果修改了 `container_name`，需要替换为实际容器名。
 
-entrypoint 只会初始化空数据目录，新实例必须提供有效 YAML 或启用 bootstrap 环境变量。环境初始化会先写入规范 YAML，再在 staging 中创建 SQLite、PKI、服务端身份、CRL、tls-crypt 和派生文件，验证后统一安装。
+`server run`（容器启动时由 entrypoint 调用）只会初始化空数据目录，新实例必须提供有效 YAML 或启用 bootstrap 环境变量。环境初始化会先写入规范 YAML，再在 staging 中创建 SQLite、PKI、服务端身份、CRL、tls-crypt 和派生文件，验证后统一安装。
 
 YAML 是期望配置，SQLite 保存最近一次经操作员确认的 applied revision。之后 YAML 缺失或与 applied revision 不同时，`server run` 只告警并继续使用数据库快照，不会自动应用配置。
 
@@ -160,7 +162,7 @@ api:
 
 ### 一次性环境变量初始化
 
-该流程适用于 Docker。裸机版无参数启动要求配置文件已经存在，请先复制并编辑包内示例。
+该流程适用于 Docker。裸机首次执行 `ovpn server run` 要求配置文件已经存在，请先复制并编辑包内示例。
 
 仅当空实例以 `OVPN_BOOTSTRAP_FROM_ENV=true` 初始化时才读取这些变量，并据此生成第一份规范 YAML。初始化完成后，程序只会告警并忽略这些变量，绝不会覆盖 YAML 或 SQLite；首次启动成功后应将开关设为 `false`。
 
