@@ -603,6 +603,7 @@ if [ "$dry_run" = 1 ]; then
     case "$(uname -m)" in x86_64) architecture=amd64 ;; aarch64 | arm64) architecture=arm64 ;; *) fail 'unsupported CPU architecture' ;; esac
     say "DRY RUN: would resolve $version and verify the linux-$architecture archive and SHA256SUMS from ${base:-GitHub Releases}; no downloads." "试运行：将解析 $version 并校验 linux-$architecture 压缩包及 SHA256SUMS，来源 ${base:-GitHub Releases}；不会下载。"
     if [ "$action" = install ]; then
+      say "DRY RUN: would register $root/ovpn server run with $manager." "试运行：将向 $manager 注册 $root/ovpn server run。"
       setup
     else
       if [ "$interactive" = 1 ]; then

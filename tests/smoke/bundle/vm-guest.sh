@@ -148,6 +148,7 @@ ovpn runtime health
 kill -TERM "$unmanaged"
 wait "$unmanaged"
 service_action start
+printf '\n# rollback sentinel\n' >>"$unit"
 cp -a "$unit" /run/pre-rollback-service
 # A deliberately broken, checksum-valid candidate must trigger real rollback.
 if OVPN_VERSION="$(cat /fixtures/bad-version)" OVPN_DOWNLOAD_BASE_URL=http://127.0.0.1:18080/bad OVPN_INSTALL_ACTION=update run_installer; then
@@ -155,6 +156,10 @@ if OVPN_VERSION="$(cat /fixtures/bad-version)" OVPN_DOWNLOAD_BASE_URL=http://127
   exit 1
 fi
 ovpn runtime health
+cmp /run/pre-rollback-service "$unit"
+cp -a /run/installer-service "$unit"
+reload_unit
+cp -a "$unit" /run/pre-rollback-service
 test "$(ovpn version --short)" = "$(cat /fixtures/new-version)"
 test "$(sha256sum /opt/ovpn/data/pki/ca.crt)" = "$certificate"
 # Kill a real updater after replacement, before its failing health check ends.
