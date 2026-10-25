@@ -85,7 +85,7 @@ Human client output uses 12 hexadecimal UUID characters by default; `--full-id/-
 | `75` | lock, busy state, or temporary resource conflict |
 | `78` | schema, state, confirmation, or security policy refusal |
 
-`migrate apply`, `config apply`, `repair apply`, `client delete`, and batch address editing require interactive confirmation or `--yes`. A non-TTY call without `--yes` is refused.
+`migrate apply`, `config apply`, `config restore`, `repair apply`, `client delete`, and batch address editing require interactive confirmation or `--yes`. A non-TTY call without `--yes` is refused.
 
 Mutations perform read-only validation, target selection, and planning before asking for confirmation. Invalid requests never prompt, and a no-op plan exits successfully without requiring `--yes`. Human errors include an actionable hint where one is safe; JSON errors retain their stable object form.
 
@@ -131,6 +131,7 @@ ovpn
 │   ├── validate        Validate the desired YAML configuration.
 │   ├── show            Show the applied SQLite configuration.
 │   ├── export          Export the applied configuration as YAML.
+│   ├── restore         Restore YAML from applied SQLite state, discarding unapplied edits.
 │   ├── plan            Plan desired-to-applied configuration changes.
 │   └── apply           Apply configuration and restart the managed runtime.
 ├── client
@@ -252,6 +253,17 @@ ovpn config export [--output|-o FILE|-]
 ```
 
 Writes a complete YAML v1 document from the applied SQLite snapshot. This is required after schema 3 migration if the instance did not already have v4 YAML. A file output is created with mode `0600` and is never overwritten; use stdout plus a temporary host file when replacing an existing YAML document.
+
+### `ovpn config restore`
+
+```bash
+ovpn config restore
+ovpn config restore -y
+```
+
+Write the last applied SQLite configuration back to the current configuration file (`OVPN_CONFIG_FILE`), discarding edits that have not been applied. Requires interactive confirmation or `--yes/-y`. Invalid or missing YAML can be restored, and the parent directory must exist and be writable. Before initialization (an empty or absent data directory), generates the example defaults without creating a database; edit `server.endpoint: vpn.example.com` before starting. Existing nonempty but damaged or incomplete data is refused rather than treated as uninitialized.
+
+Only restores YAML: the database revision stays unchanged, no historical configuration is rolled back, no service restarts, and no apply is needed afterward. Atomically replaces the file with normalized YAML and mode `0600`; existing comments, formatting, and unapplied edits are lost. Rejects symlinks, non-regular files, and individual file mounts that cannot be atomically replaced; mount the configuration directory in Docker. Back up the original first if needed, or use `config export` to write a separate file.
 
 ### `ovpn config edit`
 

@@ -52,6 +52,16 @@ sudo /opt/ovpn/ovpn server run
 
 Without arguments, `ovpn` shows the command tree without initialization. `server run` runs in the current terminal and initializes empty data from existing configuration; missing configuration at first startup produces instructions and exits. One instance can run only once: foreground and managed startup share the instance lock. SIGTERM or Ctrl-C stops child processes and cleans instance network rules. Restart a foreground process by stopping and running it again; use the service manager’s stop/restart commands for managed operation.
 
+### Discard unapplied edits
+
+```bash
+sudo ovpn config restore
+# When overwriting is already confirmed:
+sudo ovpn config restore -y
+```
+
+Restore `config/config.yaml` from the last applied SQLite configuration, including invalid or missing files. Discards unapplied edits and comments, leaving SQLite and the running service unchanged; no apply is needed afterward. Before initialization (an empty or absent data directory), generates defaults without creating a database; edit `server.endpoint: vpn.example.com` before starting.
+
 ### First initialization and configuration application
 
 `server init` creates PKI, the database and derived files, and saves the initial YAML as applied revision 1. It does not start the service and needs no extra apply. Manual init is normally unnecessary: the first `server run` or system service startup handles it automatically.

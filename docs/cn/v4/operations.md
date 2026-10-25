@@ -269,6 +269,14 @@ maintenance 命令不会启动或重启 OpenVPN，之后由 `docker compose star
 
 YAML 发生漂移但未 apply 时，重启仍使用旧 applied revision 并输出警告，避免意外文件编辑直接改变运行服务。
 
+### 撤销未应用的配置修改
+
+```bash
+docker exec openvpn ovpn config restore -y
+```
+
+用数据库中的最后已应用配置覆盖当前 YAML；也可恢复损坏或丢失的文件。初始化前的数据目录为空或不存在时，改为生成默认 YAML；启动前需修改示例公网地址。此操作会丢弃未应用修改和注释，不修改数据库或重启服务，无需再次 apply。省略 `-y` 时需使用 `docker exec -it` 进行交互确认。
+
 ### 导出 applied 配置
 
 从 applied 状态恢复完整 YAML：

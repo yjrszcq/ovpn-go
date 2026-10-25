@@ -271,6 +271,14 @@ The maintenance command does not start or restart OpenVPN; `docker compose start
 
 If YAML differs but has not been applied, restarting the server continues with the old applied revision and prints a warning. This protects the running service from accidental file edits.
 
+### Discard unapplied configuration edits
+
+```bash
+docker exec openvpn ovpn config restore -y
+```
+
+Overwrite the current YAML with the last applied database configuration, including recovery of invalid or missing files. Before initialization, an empty or absent data directory produces default YAML instead; edit the example public endpoint before starting. Discards unapplied edits and comments, without changing SQLite or restarting the service; no apply is needed afterward. Omit `-y` and use `docker exec -it` for interactive confirmation.
+
 ### Export the applied configuration
 
 Recover a complete desired YAML from applied state:

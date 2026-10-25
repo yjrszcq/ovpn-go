@@ -124,6 +124,7 @@ config
 config validate
 config show
 config export
+config restore
 config edit
 config plan
 config apply
@@ -182,7 +183,29 @@ run_ovpn config validate --json >"$WORK_DIR/validate.json"
 grep -Fq '"valid":true' "$WORK_DIR/validate.json"
 grep -Fq '"network":"10.42.0.0/24"' "$WORK_DIR/validate.json"
 
+run_ovpn config restore -y >"$WORK_DIR/restore-default.out"
+grep -Fq 'Generated default configuration' "$WORK_DIR/restore-default.out"
+run_ovpn config validate -j >"$WORK_DIR/restore-default.json"
+grep -Fq '"endpoint":"vpn.example.com"' "$WORK_DIR/restore-default.json"
+test ! -e "$WORK_DIR/data/meta/state.db"
+
 run_ovpn server init >"$WORK_DIR/init.out"
+run_ovpn config show -j >"$WORK_DIR/applied-before-restore.json"
+docker run --rm -v "$WORK_DIR/config:/etc/ovpn-conf" --entrypoint sh "$IMAGE" \
+  -ec 'printf "invalid: [\n" > /etc/ovpn-conf/config.yaml'
+if run_ovpn config restore >"$WORK_DIR/restore-unconfirmed.out" 2>"$WORK_DIR/restore-unconfirmed.err"; then
+  printf 'configuration restore accepted without confirmation\n' >&2
+  exit 1
+fi
+run_ovpn config restore -y >"$WORK_DIR/restore.out"
+run_ovpn config plan -j >"$WORK_DIR/restored-plan.json"
+grep -Fq '"in_sync":true' "$WORK_DIR/restored-plan.json"
+run_ovpn config show -j >"$WORK_DIR/applied-after-restore.json"
+cmp "$WORK_DIR/applied-before-restore.json" "$WORK_DIR/applied-after-restore.json"
+docker run --rm -v "$WORK_DIR/config:/etc/ovpn-conf" --entrypoint rm "$IMAGE" /etc/ovpn-conf/config.yaml
+run_ovpn config restore --yes >"$WORK_DIR/restore-missing.out"
+run_ovpn config validate -j >"$WORK_DIR/restore-validate.json"
+grep -Fq '"valid":true' "$WORK_DIR/restore-validate.json"
 test "$(run_ovpn client)" = "$(run_ovpn client list)"
 test "$(run_ovpn client)" = 'No clients.'
 test "$(run_ovpn client -d -j)" = "$(run_ovpn client list -d -j)"

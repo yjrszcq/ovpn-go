@@ -74,6 +74,121 @@ func TestConfigQueryUsageAndJSONErrors(t *testing.T) {
 	}
 }
 
+func TestConfigRestoreReplacesInvalidOrMissingYAMLFromAppliedState(t *testing.T) {
+	root, path := createConfigurationFixture(t)
+	t.Setenv("OVPN_DATA_DIR", root)
+	t.Setenv("OVPN_CONFIG_FILE", path)
+	code, before, stderr := run("config", "show", "-j")
+	if code != 0 {
+		t.Fatal(stderr)
+	}
+	for _, missing := range []bool{false, true} {
+		if missing {
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := os.WriteFile(path, []byte("# unapplied edits\ninvalid: ["), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		code, stdout, stderr := run("config", "restore", "-y")
+		if code != 0 || stderr != "" || !strings.Contains(stdout, "applied revision 1") {
+			t.Fatalf("restore code=%d stdout=%q stderr=%q", code, stdout, stderr)
+		}
+		desired, err := configservice.LoadDesired(path)
+		if err != nil || desired.Config.Server.Endpoint != "vpn.example.test" {
+			t.Fatalf("restored value=%+v err=%v", desired, err)
+		}
+		info, err := os.Stat(path)
+		if err != nil || info.Mode().Perm() != 0o600 {
+			t.Fatalf("restored permissions info=%v err=%v", info, err)
+		}
+		code, after, stderr := run("config", "show", "-j")
+		if code != 0 || stderr != "" || after != before {
+			t.Fatalf("restore changed database: before=%s after=%s error=%s", before, after, stderr)
+		}
+		code, plan, stderr := run("config", "plan", "-j")
+		if code != 0 || stderr != "" || !strings.Contains(plan, `"in_sync":true`) {
+			t.Fatalf("restored plan code=%d plan=%s error=%s", code, plan, stderr)
+		}
+	}
+}
+
+func TestConfigRestoreRejectsDamagedStateAndPreservesFile(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "config.yaml")
+	original := []byte("# keep this configuration\ninvalid: [")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OVPN_DATA_DIR", root)
+	t.Setenv("OVPN_CONFIG_FILE", path)
+	if code, _, _ := run("config", "restore", "-y"); code == 0 {
+		t.Fatal("restore succeeded without applied state")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != string(original) {
+		t.Fatal("failed restore changed original YAML")
+	}
+}
+
+func TestConfigRestoreBeforeInitializationGeneratesExampleDefaults(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "config.yaml")
+	dataDir := filepath.Join(root, "uninitialized")
+	t.Setenv("OVPN_DATA_DIR", dataDir)
+	t.Setenv("OVPN_CONFIG_FILE", path)
+	code, stdout, stderr := run("config", "restore", "-y")
+	if code != 0 || stderr != "" || !strings.Contains(stdout, "Edit server.endpoint") {
+		t.Fatalf("default restore code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	generated, err := configservice.LoadDesired(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	example, err := configservice.LoadDesired(filepath.Join("..", "..", "config.example.yaml"))
+	if err != nil || generated.Digest != example.Digest {
+		t.Fatalf("defaults differ from example: generated=%+v example=%+v err=%v", generated, example, err)
+	}
+	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
+		t.Fatalf("default restore initialized data: %v", err)
+	}
+}
+
+func TestConfigRestoreRequiresConfirmationAndRefusesUnsafeTargets(t *testing.T) {
+	root, path := createConfigurationFixture(t)
+	t.Setenv("OVPN_DATA_DIR", root)
+	t.Setenv("OVPN_CONFIG_FILE", path)
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{nil, {"-y", "--yes"}, {"--output", "other.yaml"}} {
+		code, _, _ := run(append([]string{"config", "restore"}, args...)...)
+		if code == 0 {
+			t.Fatalf("unexpected restore success for %v", args)
+		}
+		after, err := os.ReadFile(path)
+		if err != nil || string(after) != string(original) {
+			t.Fatal("unconfirmed/invalid restore changed YAML")
+		}
+	}
+	link := filepath.Join(root, "linked.yaml")
+	if err := os.Symlink(path, link); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{link, root} {
+		t.Setenv("OVPN_CONFIG_FILE", target)
+		code, _, _ := run("config", "restore", "--yes")
+		if code == 0 {
+			t.Fatalf("unsafe restore target accepted: %s", target)
+		}
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != string(original) {
+		t.Fatal("unsafe target restore changed original YAML")
+	}
+}
+
 func TestClientListExplainsEmptyState(t *testing.T) {
 	root, _ := createConfigurationFixture(t)
 	t.Setenv("OVPN_DATA_DIR", root)

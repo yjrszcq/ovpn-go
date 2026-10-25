@@ -52,6 +52,16 @@ sudo /opt/ovpn/ovpn server run
 
 无参数 `ovpn` 显示命令树，不写入初始化状态。`server run` 在当前终端前台运行；数据为空时使用已有配置初始化，首次缺少配置时提示操作方法并退出。同一实例只能运行一份，前台和托管启动共用实例锁。SIGTERM 或 Ctrl-C 会停止子进程并清理实例网络规则。前台进程停止后重新运行即可重启；托管服务使用对应的 stop/restart 命令。
 
+### 撤销未应用的修改
+
+```bash
+sudo ovpn config restore
+# 已确认覆盖时：
+sudo ovpn config restore -y
+```
+
+从 SQLite 中最后已应用的配置恢复 `config/config.yaml`，可覆盖无效 YAML 或重建丢失的文件。未应用修改和注释会被丢弃；数据库和运行服务保持不变，无需再次 apply。初始化前（数据目录为空或不存在）则生成默认配置，不创建数据库；请先修改示例公网地址 `server.endpoint: vpn.example.com` 再启动。
+
 ### 首次初始化与配置应用
 
 `server init` 会创建 PKI、数据库和派生文件，并将初始 YAML 保存为 applied revision 1，但不启动服务，也不需要额外 apply。通常无需手动 init，首次 `server run` 或系统服务启动会自动完成。
