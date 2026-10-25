@@ -189,11 +189,16 @@ func (server *controlServer) handle(ctx context.Context, connection net.Conn) {
 	}
 	select {
 	case server.busy <- struct{}{}:
-		defer func() { <-server.busy }()
 	default:
 		_, _ = connection.Write([]byte("ERROR\n"))
 		return
 	}
+	busyHeld := true
+	defer func() {
+		if busyHeld {
+			<-server.busy
+		}
+	}()
 	request := &applyControlRequest{ready: make(chan error, 1), resume: make(chan bool, 1), done: make(chan error, 1)}
 	select {
 	case server.requests <- request:
@@ -222,6 +227,10 @@ func (server *controlServer) handle(ctx context.Context, connection net.Conn) {
 	request.resume <- true
 	select {
 	case err := <-request.done:
+		// The runtime has completed this transaction. Release before acknowledging
+		// it: the caller can start its next apply as soon as it reads the response.
+		<-server.busy
+		busyHeld = false
 		if err != nil {
 			_, _ = connection.Write([]byte("ERROR\n"))
 			return
