@@ -563,3 +563,44 @@ func TestSupervisorStartsWithUpdatedAPIConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Network cleanup can take more than two seconds on busy or emulated hosts.
+type slowCleanupNetwork struct{ noOpNetwork }
+
+func (slowCleanupNetwork) Cleanup(ctx context.Context, _ string) error {
+	select {
+	case <-time.After(2100 * time.Millisecond):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func TestSupervisorAllowsNetworkCleanupWithinStopTimeout(t *testing.T) {
+	markers := t.TempDir()
+	t.Setenv("OVPN_RUNTIME_HELPER", "1")
+	t.Setenv("OVPN_RUNTIME_MARKERS", markers)
+	installHelperBuilder(t)
+	supervisor := testSupervisor(filepath.Join(t.TempDir(), "data"), filepath.Join(t.TempDir(), "run"))
+	supervisor.StopTimeout = 3 * time.Second
+	supervisor.Network = slowCleanupNetwork{}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- supervisor.Run(ctx, nil, testInstance()) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("supervisor did not stop")
+		}
+	})
+	waitForFile(t, filepath.Join(markers, "openvpn-started"))
+	session, err := BeginApply(ctx, supervisor.RuntimeDir)
+	if err != nil {
+		t.Fatalf("cleanup interrupted before stop timeout: %v", err)
+	}
+	if err := session.Resume(ctx); err != nil {
+		t.Fatalf("resume after slow cleanup: %v", err)
+	}
+}

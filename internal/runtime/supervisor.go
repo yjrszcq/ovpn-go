@@ -110,7 +110,7 @@ func (supervisor Supervisor) Run(ctx context.Context, hup <-chan os.Signal, inst
 		if !networkActive {
 			return nil
 		}
-		cleanupContext, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		cleanupContext, cancel := context.WithTimeout(context.Background(), supervisor.StopTimeout)
 		defer cancel()
 		if err := coordinator.Cleanup(cleanupContext, instance.ID); err != nil {
 			if strict {
