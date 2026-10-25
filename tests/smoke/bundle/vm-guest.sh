@@ -9,7 +9,15 @@ finish() {
   if [ "$code" = 0 ]; then echo OVPN_VM_TEST_PASS; else
     echo "OVPN_VM_TEST_FAIL=$code"
     if [ -d /run/systemd/system ]; then journalctl -b --no-pager -u ovpn -u dbus -u dbus-broker -n 80 || true; fi
-    for diagnostic in /run/fixture-http.log /run/interrupted.log /run/unmanaged.log; do
+    for instance in /opt/ovpn '/opt/interactive vpn' "$(cat /fixtures/install-dir)"; do
+      for diagnostic in "$instance/run/service.log" "$instance/run/service-error.log" "$instance/data/logs/openvpn.log"; do
+        if [ -f "$diagnostic" ]; then
+          printf '%s\n' "--- $diagnostic ---"
+          tail -n 80 "$diagnostic" || true
+        fi
+      done
+    done
+    for diagnostic in /run/fixture-http.log /run/interrupted.log /run/unmanaged.log /run/dns-client.log; do
       if [ -f "$diagnostic" ]; then
         printf '%s\n' "--- $diagnostic ---"
         tail -n 80 "$diagnostic" || true
@@ -22,6 +30,9 @@ finish() {
 trap finish EXIT
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 cat /etc/os-release
+# The minimal ARM initramfs can leave devtmpfs memory devices at 0660.
+# Restore their normal modes before starting services that drop privileges.
+chmod 666 /dev/null /dev/zero /dev/full /dev/random /dev/urandom
 ls -ld /dev /dev/null /opt
 if [ -d /run/systemd/system ]; then
   systemctl start dbus.service
@@ -113,6 +124,26 @@ for _ in $(seq 1 60); do
 done
 ovpn runtime health
 ovpn client create vm-client --ipv4 auto --output /opt/ovpn/config/vm-client.ovpn
+# Exercise OpenVPN's default trusted DNS helper, without raising script-security.
+# The VM resolver is a normal file, unlike Docker's injected bind mount.
+cp /etc/resolv.conf /run/resolv-before
+"$OVPN_INSTALL_DIR/bin/openvpn" --config /opt/ovpn/config/vm-client.ovpn --dev tun-dns-probe --dns server 0 address 1.1.1.1 >/run/dns-client.log 2>&1 &
+dns_client=$!
+for _ in $(seq 1 60); do
+  if grep -Fq 'Initialization Sequence Completed' /run/dns-client.log; then break; fi
+  sleep 0.2
+done
+if ! grep -Fq 'Initialization Sequence Completed' /run/dns-client.log; then
+  cat /run/dns-client.log
+  exit 1
+fi
+grep -Fq 'nameserver 1.1.1.1' /etc/resolv.conf
+kill -TERM "$dns_client"
+wait "$dns_client"
+grep -Fq 'dns up command exited with status 0' /run/dns-client.log
+grep -Fq 'dns down command exited with status 0' /run/dns-client.log
+cmp /run/resolv-before /etc/resolv.conf
+echo 'bundled DNS helper configuration and cleanup passed'
 certificate="$(sha256sum /opt/ovpn/data/pki/ca.crt)"
 chmod 640 /opt/ovpn/config/vm-client.ovpn
 profile="$(sha256sum /opt/ovpn/config/vm-client.ovpn)"

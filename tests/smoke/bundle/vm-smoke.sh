@@ -11,11 +11,25 @@ case "$archive" in *-linux-amd64.tar.gz) architecture=amd64 ;; *-linux-arm64.tar
   ;;
 esac
 driver="ovpn-bundle-vm-driver:$architecture"
-work="$(mktemp -d)"
+work_parent="${TMPDIR:-$ROOT_DIR/temp}"
+mkdir -p "$work_parent"
+work="$(mktemp -d "$work_parent/ovpn-bundle-vm.XXXXXX")"
+log_dir="${4:-$ROOT_DIR/temp/bundle-logs/$architecture/vm-$(printf '%s' "${base%@*}" | tr '/:' '--')}"
+mkdir -p "$log_dir"
+log_dir="$(realpath "$log_dir")"
 container=''
+vm_container=''
 cleanup() {
+  if [ -n "$vm_container" ]; then docker rm -f "$vm_container" >/dev/null 2>&1 || true; fi
   if [ -n "$container" ]; then docker rm -f "$container" >/dev/null 2>&1 || true; fi
-  docker run --rm -v "$work:/work" alpine:3.24 sh -c 'rm -rf /work/*' >/dev/null 2>&1 || true
+  for log in "$work"/boot-*.log; do
+    if [ -f "$log" ]; then cp "$log" "$log_dir/"; fi
+  done
+  if docker image inspect "$driver" >/dev/null 2>&1; then
+    docker run --rm -v "$work:/work" --entrypoint sh "$driver" -c 'find /work -mindepth 1 -delete' >/dev/null 2>&1 || true
+  else
+    rm -rf "$work"
+  fi
   rmdir "$work" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -35,7 +49,8 @@ container="$(docker create --platform "linux/$architecture" "$image")"
 docker export "$container" >"$work/root.tar"
 docker rm "$container" >/dev/null
 container=''
-vm_args=(--rm -e "VM_ARCH=$architecture" -v "$work:/work")
+vm_container="ovpn-bundle-vm-$architecture-$(basename "$work")"
+vm_args=(--rm --name "$vm_container" -e "VM_ARCH=$architecture" -v "$work:/work")
 if [ -c /dev/kvm ] && { { [ "$architecture" = amd64 ] && [ "$(uname -m)" = x86_64 ]; } || { [ "$architecture" = arm64 ] && [ "$(uname -m)" = aarch64 ]; }; }; then vm_args+=(--device /dev/kvm); fi
 docker run "${vm_args[@]}" "$driver" bash -euc '
  if [ "$VM_ARCH" = amd64 ]; then

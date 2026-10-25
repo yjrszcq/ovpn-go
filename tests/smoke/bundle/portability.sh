@@ -18,7 +18,7 @@ if /tmp/my-vpn server run >/tmp/no-config.log 2>&1; then
 fi
 grep -Fq config.example.yaml /tmp/no-config.log
 cp "$root/config/config.example.yaml" "$root/config/config.yaml"
-sed -i 's/vpn.example.com/127.0.0.1/' "$root/config/config.yaml"
+sed -i 's/vpn.example.com/127.0.0.1/; /^  nat:$/,/^  redirectGateway:/s/enabled: false/enabled: true/' "$root/config/config.yaml"
 # Explicit run initializes empty state and starts the real server.
 pid=''
 client_pid=''
@@ -45,6 +45,8 @@ if ! ovpn runtime health; then
   tail -n 80 "$root/data/logs/openvpn.log" || true
   exit 1
 fi
+rules="$(iptables-save)"
+printf '%s\n' "$rules" | grep -F openvpn-docker:
 ovpn client create portable-client --ipv4 auto
 ovpn client export portable-client --output /tmp/portable-client.ovpn
 openvpn --config /tmp/portable-client.ovpn --dev tun-client --route-nopull >/tmp/portable-client.log 2>&1 &
@@ -65,7 +67,8 @@ kill -TERM "$pid"
 wait "$pid"
 pid=''
 iptables -L unrelated_fixture >/dev/null
-if iptables-save | grep -E 'OVPN_|ovpn:'; then
+rules="$(iptables-save)"
+if printf '%s\n' "$rules" | grep -E '(^:OVPN[FN]-|openvpn-docker:)'; then
   echo 'instance rules remain after stop' >&2
   exit 1
 fi

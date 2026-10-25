@@ -20,6 +20,10 @@ class Session:
     def __init__(self):
         self.master, slave = pty.openpty()
         def terminal():
+            # OpenRC boot scripts may inherit ignored terminal signals. Recreate
+            # a normal terminal launch so Bash can install its Ctrl-C handler.
+            for number in (signal.SIGINT, signal.SIGQUIT, signal.SIGHUP, signal.SIGTERM):
+                signal.signal(number, signal.SIG_DFL)
             os.setsid()
             fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
         self.process = subprocess.Popen(
@@ -61,7 +65,7 @@ class Session:
                     pass
         if self.process.poll() is None:
             os.killpg(self.process.pid, signal.SIGKILL)
-            raise AssertionError('Installer did not exit')
+            raise AssertionError('Installer did not exit: ' + self.transcript.decode(errors='replace'))
         os.close(self.master)
         assert self.process.returncode == code, self.transcript.decode(errors='replace')
 

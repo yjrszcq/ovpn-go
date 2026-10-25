@@ -70,7 +70,8 @@ start
 grep -E '^port 1195$' "$root/data/server/server.conf"
 ovpn config show --json | grep -E '"revision": *1'
 stop INT
-if iptables-save | grep -E 'OVPN_|ovpn:'; then
+rules="$(iptables-save)"
+if grep -E '(^:OVPN[FN]-|openvpn-docker:)' <<<"$rules"; then
   echo 'rules remain'
   exit 1
 fi

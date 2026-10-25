@@ -197,15 +197,19 @@ YAML
     jq -e '.config.logging.backups == 2' >/dev/null
   docker exec "$server" ovpn runtime health
 
+  # DNS application is tested in the VM; Docker injects a bind-mounted resolver
+  # file which cannot be atomically replaced by the upstream DNS script.
   set +e
-  docker run --rm \
+  # Retain the container until assertions finish: TCP disconnect can make the
+  # client exit before the explicit stop below.
+  docker run \
     --name "$client_container" \
     --network "$network" \
     --cap-add NET_ADMIN \
     --device /dev/net/tun \
     -v "$protocol_dir/client.ovpn:/client.ovpn:ro" \
     --entrypoint /usr/bin/timeout \
-    "$IMAGE" 20s openvpn --config /client.ovpn --verb 4 >"$protocol_dir/client.log" 2>&1 &
+    "$IMAGE" -k 10s 300s openvpn --config /client.ovpn --dns-updown disable --verb 4 >"$protocol_dir/client.log" 2>&1 &
   local client_process=$!
   active_containers+=("$client_container")
   set -e
@@ -273,7 +277,7 @@ YAML
       --output - >"$protocol_dir/peer.ovpn"
     docker run -d --name "$peer" --network "$network" --cap-add NET_ADMIN --device /dev/net/tun \
       -v "$protocol_dir/peer.ovpn:/client.ovpn:ro" -v "$data_dir:/probe-data:ro" \
-      --entrypoint openvpn "$IMAGE" --config /client.ovpn >"$protocol_dir/peer.id"
+      --entrypoint openvpn "$IMAGE" --config /client.ovpn --dns-updown disable >"$protocol_dir/peer.id"
     active_containers+=("$peer")
     for _ in $(seq 1 40); do
       if docker logs "$peer" 2>&1 | grep -Fq 'Initialization Sequence Completed'; then break; fi
@@ -292,6 +296,8 @@ YAML
   test -s "$protocol_dir/runtime-logs.out"
   docker exec "$server" ovpn runtime events --lines 10 --json >"$protocol_dir/runtime-events.jsonl"
 
+  local connection_count
+  connection_count="$(grep -c 'Initialization Sequence Completed' "$protocol_dir/client.log")"
   if [ "$protocol" = udp ]; then
     local address_result
     address_result="$(docker exec "$server" ovpn client address set "$client" --ipv4 dynamic --json)"
@@ -308,17 +314,33 @@ YAML
     fi
   fi
 
+  if [ "$protocol" = tcp ]; then
+    # Let the intentional disconnect finish and verify reconnection before sending
+    # TERM; interrupting OpenVPN halfway through its restart can race its teardown.
+    for _ in $(seq 1 160); do
+      if [ "$(grep -c 'Initialization Sequence Completed' "$protocol_dir/client.log")" -gt "$connection_count" ]; then break; fi
+      sleep 0.1
+    done
+    if [ "$(grep -c 'Initialization Sequence Completed' "$protocol_dir/client.log")" -le "$connection_count" ]; then
+      cat "$protocol_dir/client.log" >&2
+      echo 'client did not reconnect after the intentional disconnect' >&2
+      return 1
+    fi
+  fi
+  # Keep the connected client alive until every traffic/control assertion finishes.
+  # Slow runners can exceed the old 20-second lifetime while creating a peer.
+  docker stop --time 10 "$client_container" >/dev/null
   set +e
   wait "$client_process"
   local status=$?
   set -e
-  if { [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; } || ! grep -Fq 'Initialization Sequence Completed' "$protocol_dir/client.log"; then
+  if { [ "$status" -ne 0 ] && [ "$status" -ne 124 ] && [ "$status" -ne 143 ]; } || ! grep -Fq 'Initialization Sequence Completed' "$protocol_dir/client.log"; then
     cat "$protocol_dir/client.log" >&2
     docker logs "$server" >&2 || true
     return 1
   fi
 
-  docker rm -f "$server" "$target" >/dev/null
+  docker rm -f "$server" "$target" "$client_container" >/dev/null
   if [ -n "$peer" ]; then docker rm -f "$peer" >/dev/null; fi
   docker network rm "$network" >/dev/null
 }
