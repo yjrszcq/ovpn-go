@@ -2,7 +2,14 @@
 # Runs after systemd/OpenRC boots as PID 1 inside an isolated VM.
 set -Eeuo pipefail
 trap 'echo "VM assertion failed: ${BASH_SOURCE[0]}:$LINENO: $BASH_COMMAND"' ERR
+exec 3>&1
 exec > >(tee /dev/console) 2>&1
+console_pid=$!
+flush_console() {
+  # Closing both pipe writers lets tee drain before init can kill it on shutdown.
+  exec 1>&3 2>&1 3>&-
+  wait "$console_pid"
+}
 finish() {
   code=$?
   trap - EXIT
@@ -25,6 +32,7 @@ finish() {
     done
   fi
   sync
+  flush_console
   if command -v systemctl >/dev/null && [ -d /run/systemd/system ]; then systemctl poweroff --no-block; else poweroff; fi
 }
 trap finish EXIT
@@ -291,5 +299,6 @@ if [ ! -f /fixtures/rebooted ]; then
   echo OVPN_VM_REBOOT
   sync
   trap - EXIT
+  flush_console
   reboot
 fi
