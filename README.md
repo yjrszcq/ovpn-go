@@ -22,8 +22,8 @@ REST API v1 is disabled by default and intended for a separate frontend or autom
 
 | Deployment | Distribution | Getting started |
 | --- | --- | --- |
-| Docker | `szcq/openvpn` or `ghcr.io/yjrszcq/ovpn-go` | Compose instructions below |
-| Native Linux | Self-contained amd64/arm64 archive | [Install, configure, run and update](docs/en/v4/native-linux.md) |
+| Docker | `szcq/openvpn` or `ghcr.io/yjrszcq/ovpn-go` | [Docker instructions below](#docker) |
+| Native Linux | Self-contained amd64/arm64 archive | [Native Linux instructions below](#native-linux-online-installer) |
 
 GHCR numeric tags track the project version; Docker Hub numeric tags track the embedded OpenVPN version. Choose the correct version axis when pinning an image.
 

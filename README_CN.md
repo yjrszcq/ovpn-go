@@ -22,8 +22,8 @@ REST API v1 默认关闭，适合由独立前端或自动化客户端通过 HTTP
 
 | 部署方式 | 交付形式 | 入门文档 |
 | --- | --- | --- |
-| Docker | `szcq/openvpn` 或 `ghcr.io/yjrszcq/ovpn-go` | 下方 Compose 部署步骤 |
-| Linux 裸机 | 自包含 amd64/arm64 压缩包 | [安装、配置、运行和更新](docs/cn/v4/native-linux.md) |
+| Docker | `szcq/openvpn` 或 `ghcr.io/yjrszcq/ovpn-go` | [下方 Docker 部署步骤](#docker) |
+| Linux 裸机 | 自包含 amd64/arm64 压缩包 | [下方 Linux 裸机部署步骤](#linux-裸机在线脚本) |
 
 GHCR 数字 tag 对应项目版本，Docker Hub 数字 tag 对应内置 OpenVPN 版本；固定镜像版本时请区分这两个版本轴。
 
