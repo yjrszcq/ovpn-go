@@ -148,7 +148,7 @@ if grep -Fq '.contract-grid' "$WORK_DIR/docs.css"; then
   printf 'REST API smoke failed: documentation CSS contains the retired side-by-side contract layout\n' >&2
   exit 1
 fi
-test "$(grep -o '"operationId"' "$WORK_DIR/openapi.json" | wc -l)" -eq 22
+test "$(grep -o '"operationId"' "$WORK_DIR/openapi.json" | wc -l)" -eq 24
 grep -Eiq '^content-security-policy:.*default-src' "$WORK_DIR/docs.headers"
 docs_redirect_code="$(curl -sS -o /dev/null -D "$WORK_DIR/docs-redirect.headers" -w '%{http_code}' "$api_url/docs")"
 test "$docs_redirect_code" = 308
@@ -199,6 +199,20 @@ desired_config="$(sed -n 's/^{"digest":"[0-9a-f]\{64\}","config":\(.*\)}$/\1/p' 
 test -n "$desired_digest"
 test -n "$current_revision"
 test -n "$desired_config"
+curl -fsS -D "$WORK_DIR/config-export.headers" -H "$authorization" \
+  "$api_url/api/v1/config/export" >"$WORK_DIR/config-export.yaml"
+operation_count=$((operation_count + 1))
+grep -Eiq '^content-type: application/yaml' "$WORK_DIR/config-export.headers"
+grep -Eiq '^content-disposition: attachment; filename="config.yaml"' "$WORK_DIR/config-export.headers"
+grep -Fq 'endpoint: vpn.example.test' "$WORK_DIR/config-export.yaml"
+curl -fsS -D "$WORK_DIR/config-restore.headers" -X POST \
+  -H "$authorization" -H 'Content-Type: application/json' \
+  -d "{\"current_revision\":$current_revision,\"confirm\":true}" \
+  "$api_url/api/v1/config/restore" >"$WORK_DIR/config-restore.json"
+operation_count=$((operation_count + 1))
+grep -Eiq '^etag: "[0-9a-f]{64}"' "$WORK_DIR/config-restore.headers"
+docker exec "$CONTAINER" cat /etc/ovpn-conf/config.yaml >"$WORK_DIR/config-restored.yaml"
+cmp "$WORK_DIR/config-export.yaml" "$WORK_DIR/config-restored.yaml"
 curl -fsS -D "$WORK_DIR/desired-put.headers" -X PUT \
   -H "$authorization" -H 'Content-Type: application/json' -H "If-Match: \"$desired_digest\"" \
   -d "$desired_config" "$api_url/api/v1/config/desired" >"$WORK_DIR/desired-put.json"
@@ -285,7 +299,7 @@ deleted_code="$(curl -sS -o "$WORK_DIR/deleted-key.json" -w '%{http_code}' \
   -H "$authorization" "$api_url/api/v1/state")"
 test "$deleted_code" = 401
 
-test "$operation_count" -eq 22
+test "$operation_count" -eq 24
 
 docker rm -f "$CONTAINER" >/dev/null
 docker run --rm -i -v "$WORK_DIR/config:/config" --entrypoint sh "$IMAGE" -ec 'cat > /config/config.yaml' <<'YAML'

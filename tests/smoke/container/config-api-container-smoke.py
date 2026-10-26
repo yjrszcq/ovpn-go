@@ -61,6 +61,77 @@ try:
         code, _, body = request('/api/v1/state', 'OPTIONS', headers={'Origin': origin, 'Access-Control-Request-Method': 'GET'})
         assert code == expected, (origin, code, body)
 
+    # Recover the actual file while OpenVPN is running, without a configuration apply.
+    applied_before = json.loads(request('/api/v1/config/applied')[2])
+    revision = applied_before['revision']
+    config_path = '/etc/ovpn-conf/config.yaml'
+
+    def processes():
+        # Musl payloads run through their private loader; pidof is unreliable here.
+        return docker('top', name, '-eo', 'pid,args').splitlines()[1:]
+
+    processes_before = processes()
+    status, headers, exported = request('/api/v1/config/export')
+    assert status == 200 and headers['Content-Type'] == 'application/yaml'
+    assert headers['Content-Disposition'] == 'attachment; filename="config.yaml"'
+    assert headers['Cache-Control'] == 'no-store'
+    assert b'endpoint: 127.0.0.1' in exported
+    restore_body = {'current_revision': revision, 'confirm': True}
+    for damaged in ['valid', 'invalid', 'missing']:
+        if damaged == 'invalid':
+            docker('exec', name, 'sh', '-c', 'printf "invalid: [" > ' + config_path)
+        elif damaged == 'missing':
+            docker('exec', name, 'sh', '-c', 'unlink ' + config_path)
+        else:
+            docker('exec', name, 'sh', '-c', "sed -i 's/endpoint: 127.0.0.1/endpoint: draft.example.test/' " + config_path + ' && printf "# unapplied comment\n" >> ' + config_path)
+        # Export always reads applied state, even if desired YAML cannot be parsed.
+        assert request('/api/v1/config/export')[2] == exported
+        status, headers, body = request('/api/v1/config/restore', 'POST', restore_body)
+        assert status == 200, (status, body)
+        assert json.loads(body) == applied_before
+        assert headers['ETag'] == '"' + applied_before['digest'] + '"'
+        assert docker('exec', name, 'cat', config_path).encode() == exported
+        assert docker('exec', name, 'stat', '-c', '%a', config_path).strip() == '600'
+    for data, expected in [
+        ({'current_revision': revision + 1, 'confirm': True}, 409),
+        ({'current_revision': revision}, 422),
+        ({'confirm': True}, 422),
+        ({'current_revision': revision, 'confirm': True, 'force': True}, 400),
+    ]:
+        status, _, body = request('/api/v1/config/restore', 'POST', data)
+        assert status == expected, (status, body)
+        assert docker('exec', name, 'cat', config_path).encode() == exported
+    for path, method, expected in [
+        ('/api/v1/config/export?unexpected=1', 'GET', 400),
+        ('/api/v1/config/export', 'POST', 405),
+        ('/api/v1/config/restore', 'GET', 405),
+    ]:
+        assert request(path, method)[0] == expected
+    for path, method in [('/api/v1/config/export', 'GET'), ('/api/v1/config/restore', 'POST')]:
+        unauthenticated = urllib.request.Request(base + path, method=method)
+        try:
+            urllib.request.urlopen(unauthenticated, timeout=10)
+            raise AssertionError('Unauthenticated configuration request accepted')
+        except urllib.error.HTTPError as error:
+            assert error.code == 401
+    docker('exec', name, 'sh', '-c', 'mv ' + config_path + ' /etc/ovpn-conf/saved.yaml && ln -s /etc/ovpn-conf/saved.yaml ' + config_path)
+    status, _, body = request('/api/v1/config/restore', 'POST', restore_body)
+    assert status == 422 and json.loads(body)['error']['kind'] == 'unsafe_config_target'
+    assert docker('exec', name, 'cat', '/etc/ovpn-conf/saved.yaml').encode() == exported
+    docker('exec', name, 'sh', '-c', 'unlink ' + config_path + ' && mv /etc/ovpn-conf/saved.yaml ' + config_path)
+    lock = subprocess.Popen(['docker', 'exec', name, 'flock', '-x', '/etc/openvpn/.ovpn-data.lock', 'sh', '-c', 'echo locked; sleep 4'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        assert lock.stdout.readline().strip() == b'locked'
+        status, _, body = request('/api/v1/config/restore', 'POST', restore_body)
+        assert status == 409, (status, body)
+    finally:
+        assert lock.wait(timeout=10) == 0
+    assert request('/api/v1/config/restore', 'POST', restore_body)[0] == 200
+    assert json.loads(request('/api/v1/config/applied')[2]) == applied_before
+    assert json.loads(cli('config', 'plan', '-j'))['configuration']['in_sync'] is True
+    assert processes() == processes_before, 'Restoration restarted a managed process'
+    cli('runtime', 'health')
+
     def apply_api(change, address=None):
         desired = json.loads(request('/api/v1/config/desired', address=address)[2])
         applied = json.loads(request('/api/v1/config/applied', address=address)[2])
@@ -88,7 +159,7 @@ try:
     cli('config', 'edit', '--editor', '/etc/ovpn-conf/editor', '--apply', '--yes')
     wait(lambda: request('/healthz', address=newbase)[0] == 200)
     cli('runtime', 'health')
-    print('Actual container: editor+apply, ignored legacy API environment, disabled empty CORS, REST port/CORS update, REST disable response, CLI re-enable: PASS')
+    print('Actual container: YAML export/restore (valid/missing/malformed, auth, stale revision, unsafe target, concurrent lock, unchanged applied state/PIDs), editor+apply, ignored legacy API environment, disabled empty CORS, REST port/CORS update, REST disable response, CLI re-enable: PASS')
 except BaseException:
     print(docker('logs', name))
     raise

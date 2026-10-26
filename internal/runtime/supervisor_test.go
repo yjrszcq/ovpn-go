@@ -64,12 +64,13 @@ func TestRuntimeHelperProcess(t *testing.T) {
 		_ = listener.Close()
 		_ = os.Remove(listen)
 	case "openvpn":
+		signals := make(chan os.Signal, 2)
+		signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+		// Publish readiness only after HUP and shutdown handlers are installed.
 		_ = os.WriteFile(filepath.Join(markerDir, "openvpn-started"), []byte("ok"), 0o600)
 		if os.Getenv("OVPN_RUNTIME_OPENVPN_EXIT") == "1" {
 			os.Exit(4)
 		}
-		signals := make(chan os.Signal, 2)
-		signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 		for value := range signals {
 			if value == syscall.SIGHUP {
 				_ = os.WriteFile(filepath.Join(markerDir, "openvpn-hup"), []byte("ok"), 0o600)
