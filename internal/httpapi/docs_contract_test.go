@@ -428,3 +428,19 @@ func TestOpenAPIExportExampleIsLoadableConfiguration(t *testing.T) {
 		t.Fatalf("download example is not valid configuration: %v", err)
 	}
 }
+
+func TestOpenAPIConfigurationWriteModelExcludesLocalAPISettings(t *testing.T) {
+	var document map[string]any
+	if err := json.Unmarshal(openAPIDocument(t), &document); err != nil {
+		t.Fatal(err)
+	}
+	schemas := object(t, object(t, document["components"], "components")["schemas"], "schemas")
+	writable := object(t, schemas["VPNConfiguration"], "VPNConfiguration")
+	if object(t, writable["properties"], "VPN properties")["api"] != nil || writable["additionalProperties"] != false {
+		t.Fatal("write schema exposes API settings")
+	}
+	full := object(t, schemas["Configuration"], "Configuration")
+	if object(t, object(t, full["properties"], "properties")["api"], "api")["readOnly"] != true {
+		t.Fatal("API settings must be read-only in full snapshots")
+	}
+}

@@ -205,7 +205,7 @@ ovpn server run
 
 配置就绪且数据为空时先初始化，再在当前终端前台运行；裸机首次缺少配置时会提示复制、编辑包内示例并退出。初始化后继续使用 applied 快照。重复启动同一实例会因实例锁被拒绝，不会接管已有进程。长期后台运行使用 [systemd/OpenRC](native-linux.md#手工注册系统服务) 或 Docker；未提供 daemon、start/stop/restart 或服务注册 CLI。
 
-加载 applied SQLite 快照，恢复中断 operation，reconcile IPv4 forwarding/防火墙，并监督 OpenVPN 与 Go broker。applied 配置中 `api.enabled` 为 true 时还会监督 `ovpn-api`；API 设置通过配置 apply 生效。TERM/INT 停止所有已启用子进程，HUP 只转发给 OpenVPN。
+加载 applied SQLite 快照，恢复中断 operation，reconcile IPv4 forwarding/防火墙，并监督 OpenVPN 与 Go broker。applied 配置中 `api.enabled` 为 true 时还会监督 `ovpn-api`；API 设置通过本地 CLI 配置 apply 生效。TERM/INT 停止所有已启用子进程，HUP 只转发给 OpenVPN。
 
 YAML 缺失或发生漂移只会产生警告；runtime 继续使用最近 applied revision，启动时绝不会自动 apply。
 

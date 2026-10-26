@@ -13,6 +13,36 @@ import (
 	storesqlite "github.com/yjrszcq/ovpn-go/internal/store/sqlite"
 )
 
+// desiredConfiguration contains only remotely writable VPN settings.
+// The full config.View also contains local-only API listener settings.
+type desiredConfiguration struct {
+	Version int `json:"version"`
+	Server  struct {
+		Endpoint       string `json:"endpoint"`
+		Protocol       string `json:"protocol"`
+		Family         string `json:"family"`
+		Port           uint16 `json:"port"`
+		ClientToClient bool   `json:"client_to_client"`
+	} `json:"server"`
+	IPv4 struct {
+		Network         string   `json:"network"`
+		DynamicPoolSize uint64   `json:"dynamic_pool_size"`
+		NATEnabled      bool     `json:"nat_enabled"`
+		NATInterface    string   `json:"nat_interface"`
+		RedirectGateway bool     `json:"redirect_gateway"`
+		DNS             []string `json:"dns"`
+		Routes          []string `json:"routes"`
+	} `json:"ipv4"`
+	Logging struct {
+		MaxBytes uint64 `json:"max_bytes"`
+		Backups  uint32 `json:"backups"`
+	} `json:"logging"`
+}
+
+func (value desiredConfiguration) view() configservice.View {
+	return configservice.View{Version: value.Version, Server: value.Server, IPv4: value.IPv4, Logging: value.Logging}
+}
+
 type ConfigApplyRequest struct {
 	DesiredDigest   string `json:"desired_digest"`
 	CurrentRevision uint64 `json:"current_revision"`
@@ -87,12 +117,12 @@ func (handler *handler) routeConfiguration(response http.ResponseWriter, request
 			writeAPIError(response, http.StatusBadRequest, "invalid_if_match", "If-Match must contain one quoted digest", requestID)
 			return true
 		}
-		var view configservice.View
-		if err := decodeJSON(response, request, &view); err != nil {
+		var input desiredConfiguration
+		if err := decodeJSON(response, request, &input); err != nil {
 			writeAPIError(response, http.StatusBadRequest, "invalid_json", "request body is invalid", requestID)
 			return true
 		}
-		value, err := handler.resources.PutDesired(request.Context(), expected, view)
+		value, err := handler.resources.PutDesired(request.Context(), expected, input.view())
 		handler.writeDesiredResult(response, value, err, requestID)
 		return true
 	case "/api/v1/config/plan":
@@ -167,6 +197,8 @@ func (handler *handler) writeConfigurationResult(response http.ResponseWriter, v
 		writeAPIError(response, http.StatusConflict, "recovery_required", "interrupted operation recovery is required", requestID)
 	case errors.Is(err, configservice.ErrUnsafeTarget):
 		writeAPIError(response, http.StatusUnprocessableEntity, "unsafe_config_target", "configuration target must be a regular file", requestID)
+	case errors.Is(err, configservice.ErrLocalAPIConfig):
+		writeAPIError(response, http.StatusUnprocessableEntity, "local_configuration_required", "API settings must be applied locally through the CLI", requestID)
 	case errors.Is(err, configservice.ErrInvalidDesired):
 		writeAPIError(response, http.StatusUnprocessableEntity, "invalid_configuration", "configuration is invalid", requestID)
 	default:

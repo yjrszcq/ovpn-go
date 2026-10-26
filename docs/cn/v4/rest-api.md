@@ -25,7 +25,7 @@ api:
   cors: []
 ```
 
-`api.listenIP` 接受 IPv4 或 IPv6 地址；`0.0.0.0` 监听所有 IPv4 网卡。端口必须为未占用的 1–65535；host network 不需要 ports 映射。修改后通过配置 apply 生效，也可通过 REST 配置接口应用；关闭或变更 API 监听会先完成当前请求。
+`api.listenIP` 接受 IPv4 或 IPv6 地址；`0.0.0.0` 监听所有 IPv4 网卡。端口必须为未占用的 1–65535；host network 不需要 ports 映射。这些设置通过 YAML 或安装脚本配置，再通过本地 CLI 应用；REST 配置修改请求不再包含这些字段。
 
 `api.cors: []` 关闭 CORS，包括 localhost 的跨域请求。同源浏览器和非浏览器客户端不需要 CORS。允许来源使用不带协议的 `host[:port]` YAML 列表，例如 `[vpn-admin.example.com, "192.0.2.10:3000"]`；`["*"]` 允许任意有效 HTTP(S) 来源，必须单独使用。主机名不区分大小写，端口精确匹配，不允许路径或凭据。CORS 不代替认证和网络访问控制。
 
@@ -4487,7 +4487,7 @@ JSON 格式有效，但违反客户端、IPv4 或配置语义规则。
 
 ### 20. `PUT /api/v1/config/desired`
 
-使用 CAS 替换期望配置。将上一次期望配置摘要作为带双引号的 If-Match 值，并在请求体中发送完整的规范化配置。
+使用 CAS 替换期望配置。将上一次期望配置摘要作为带双引号的 If-Match 值，在请求体中发送不含 api 的完整 VPN 配置；本地 API 设置保持不变。
 
 #### 请求参数
 
@@ -4518,11 +4518,6 @@ JSON 格式有效，但违反客户端、IPv4 或配置语义规则。
 | `ipv4.redirect_gateway` | `body` | `boolean` | 是 | 示例: false | 生成的配置文件是否将默认 IPv4 路由重定向到 VPN。 |
 | `ipv4.dns` | `body` | `string[]` | 是 | 示例: ["1.1.1.1"] | 推送给客户端的 IPv4 DNS 服务器。 |
 | `ipv4.routes` | `body` | `string[]` | 是 | 示例: ["10.20.0.0/16"] | 推送给客户端的其他 IPv4 CIDR 路由。 |
-| `api` | `body` | `object` | 否 | - | API 设置；默认时可省略。 |
-| `api.enabled` | `body` | `boolean` | api 存在时必填 | 默认：false | 启用监听。 |
-| `api.listen_ip` | `body` | `string` | api 存在时必填 | 默认：127.0.0.1 | IPv4 或 IPv6 监听地址。 |
-| `api.port` | `body` | `integer` | api 存在时必填 | 1–65535；默认：11940 | 监听端口。 |
-| `api.cors` | `body` | `string[]` | api 存在时必填 | 默认：[] | 空列表关闭 CORS；不带协议的来源或 ["*"]。 |
 | `logging` | `body` | `object` | 是 | - | 运行时日志轮转设置。 |
 | `logging.max_bytes` | `body` | `integer` | 是 | 最小值: 1；示例: 10485760 | 触发轮转前活动日志文件的最大字节数。 |
 | `logging.backups` | `body` | `integer` | 是 | 最小值: 0；示例: 5 | 保留的轮转日志文件数量。 |
@@ -5106,6 +5101,8 @@ JSON 格式有效，但违反客户端、IPv4 或配置语义规则。
 
 在线应用当前期望配置。使用 GET/PUT desired 返回的 desired_digest 和 GET plan 返回的 current_revision。OpenVPN 与 broker 重启期间 API 仍保持可用。
 
+API 自身设置只能通过本地 CLI 应用。
+
 #### 请求参数
 
 ##### Header 参数
@@ -5357,7 +5354,7 @@ Bearer API key 缺失、格式错误、未知或已删除。
 
 ##### `422 无法处理`
 
-JSON 格式有效，但违反客户端、IPv4 或配置语义规则。
+应用前提无效，或存在必须通过 CLI 应用的本地 API 设置变更。
 
 内容类型：`application/json`
 
@@ -5366,8 +5363,8 @@ JSON 格式有效，但违反客户端、IPv4 或配置语义规则。
 ```json
 {
   "error": {
-    "kind": "invalid_client",
-    "message": "client request is not valid for the current state",
+    "kind": "local_configuration_required",
+    "message": "API settings must be applied locally through the CLI",
     "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
   }
 }
@@ -5378,8 +5375,8 @@ JSON 格式有效，但违反客户端、IPv4 或配置语义规则。
 | 字段 | 类型 | 必填 | 格式 / 示例 / 约束 | 用途说明 |
 |---|---|---|---|---|
 | `error` | `object` | 是 | - | 可供程序读取的 API 错误详情。 |
-| `error.kind` | `string` | 是 | 示例: "invalid_client" | 稳定且可供程序读取的错误类型。 |
-| `error.message` | `string` | 是 | 示例: "client request is not valid for the current state" | 可安全展示的错误消息。 |
+| `error.kind` | `string` | 是 | 示例: "local_configuration_required" | 稳定且可供程序读取的错误类型。 |
+| `error.message` | `string` | 是 | 示例: "API settings must be applied locally through the CLI" | 可安全展示的错误消息。 |
 | `error.request_id` | `string` | 是 | 格式: uuid；示例: "33ba813e-fc63-4af8-b338-7f7486f82202" | 用于关联请求与服务器日志的 UUID。 |
 
 ##### `500 服务器内部错误`
@@ -5955,6 +5952,8 @@ Bearer API key 缺失、格式错误、未知或已删除。
 
 ## 配置工作流
 
+请求模型只包含 VPN 设置。请先删除 GET 响应中的 `api`，再将配置发送到 PUT desired；YAML 中已有的 API 设置会被保留。本地修改如包含 API 自身设置，必须通过本地 CLI 应用后再使用 REST apply，`force` 不改变这一边界。配置下载和恢复仍包含完整配置。
+
 配置使用乐观并发的三步流程：
 
 ```text
@@ -5968,7 +5967,7 @@ curl -H "Authorization: Bearer $OVPN_API_KEY" \
   https://vpn-admin.example.com/api/v1/config/desired
 ```
 
-替换 desired YAML 时，请求 body 必须是完整规范化的 `config` 对象，并在 `If-Match` 中发送之前读取的 digest：
+替换 desired YAML 时，请求 body 必须是去除 `api` 后的完整 VPN `config` 对象，并在 `If-Match` 中发送之前读取的 digest：
 
 ```http
 PUT /api/v1/config/desired HTTP/1.1

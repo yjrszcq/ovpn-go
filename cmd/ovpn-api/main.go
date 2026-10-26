@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"syscall"
 	"time"
 
@@ -158,6 +159,9 @@ func newResources(database *storesqlite.Store, instanceID, dataDir string) (http
 		}
 		if uint64(instance.Applied.Revision) != expectedRevision {
 			return domain.Config{}, configurationservice.ErrPlanConflict
+		}
+		if !reflect.DeepEqual(configservice.EffectiveAPI(desired.API), configservice.EffectiveAPI(instance.Applied.Config.API)) {
+			return domain.Config{}, configservice.ErrLocalAPIConfig
 		}
 		return desired, nil
 	}

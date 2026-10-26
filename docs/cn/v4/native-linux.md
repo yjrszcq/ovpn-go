@@ -111,7 +111,7 @@ api:
   cors: []
 ```
 
-空 `cors` 列表关闭 CORS。远程访问请使用 HTTPS 反向代理；参见 [REST API 指南](rest-api.md)。
+API 自身设置由本地管理，REST 配置修改请求不包含这些字段。空 `cors` 列表关闭 CORS。远程访问请使用 HTTPS 反向代理；参见 [REST API 指南](rest-api.md)。
 
 为此实例创建 API key：
 

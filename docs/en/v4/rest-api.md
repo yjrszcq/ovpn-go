@@ -25,7 +25,7 @@ api:
   cors: []
 ```
 
-`api.listenIP` accepts an IPv4 or IPv6 address; `0.0.0.0` listens on all IPv4 interfaces. Choose an unused port from 1–65535; host networking needs no ports mapping. Apply changes through the CLI or REST configuration endpoint. Listener changes and disabling the API drain the current request first.
+`api.listenIP` accepts an IPv4 or IPv6 address; `0.0.0.0` listens on all IPv4 interfaces. Choose an unused port from 1–65535; host networking needs no ports mapping. Configure these settings in YAML or the installer, then apply them locally through the CLI. They are not part of the REST configuration write model.
 
 `api.cors: []` disables CORS, including cross-origin requests from localhost. Same-origin browsers and non-browser clients need no CORS configuration. Allowed origins are a YAML list of scheme-less `host[:port]` values, for example `[vpn-admin.example.com, "192.0.2.10:3000"]`. `["*"]` allows any valid HTTP(S) origin and must be used alone. Hostnames are case-insensitive; ports match exactly. Paths and credentials are forbidden. CORS does not replace authentication or network access controls.
 
@@ -4487,7 +4487,7 @@ Response fields:
 
 ### 20. `PUT /api/v1/config/desired`
 
-Replace desired configuration with CAS. Send the previous desired digest as a quoted If-Match value and the complete normalized configuration as the body.
+Replace desired configuration with CAS. Send the previous desired digest as a quoted If-Match value and the complete VPN configuration without api as the body. Local API settings are preserved.
 
 #### Request parameters
 
@@ -4518,11 +4518,6 @@ Replace desired configuration with CAS. Send the previous desired digest as a qu
 | `ipv4.redirect_gateway` | `body` | `boolean` | yes | example: false | Whether generated profiles redirect the default IPv4 route through VPN. |
 | `ipv4.dns` | `body` | `string[]` | yes | example: ["1.1.1.1"] | IPv4 DNS servers pushed to clients. |
 | `ipv4.routes` | `body` | `string[]` | yes | example: ["10.20.0.0/16"] | Additional IPv4 CIDR routes pushed to clients. |
-| `api` | `body` | `object` | no | - | REST API settings; omitted for defaults. |
-| `api.enabled` | `body` | `boolean` | yes if api present | default: false | Enable the listener. |
-| `api.listen_ip` | `body` | `string` | yes if api present | default: 127.0.0.1 | IPv4 or IPv6 listen address. |
-| `api.port` | `body` | `integer` | yes if api present | 1–65535; default: 11940 | Listening port. |
-| `api.cors` | `body` | `string[]` | yes if api present | default: [] | Empty disables CORS; scheme-less origins or ["*"]. |
 | `logging` | `body` | `object` | yes | - | Runtime log rotation settings. |
 | `logging.max_bytes` | `body` | `integer` | yes | minimum: 1; example: 10485760 | Maximum active log file size before rotation. |
 | `logging.backups` | `body` | `integer` | yes | minimum: 0; example: 5 | Number of rotated log files retained. |
@@ -5104,7 +5099,7 @@ Response fields:
 
 ### 22. `POST /api/v1/config/apply`
 
-Apply the current desired configuration online. Use desired_digest from GET/PUT desired and current_revision from GET plan. The API remains available while OpenVPN and the broker restart.
+Apply the current desired configuration online. Use desired_digest from GET/PUT desired and current_revision from GET plan. The API remains available while OpenVPN and the broker restart. API listener settings are local-only; apply their changes through ovpn config edit -a or ovpn config apply.
 
 #### Request parameters
 
@@ -5357,7 +5352,7 @@ Response fields:
 
 ##### `422 Unprocessable Entity`
 
-JSON is valid but violates client, IPv4, or configuration semantics.
+Invalid apply preconditions, or local API setting changes requiring CLI apply.
 
 Content type: `application/json`
 
@@ -5366,8 +5361,8 @@ Response example:
 ```json
 {
   "error": {
-    "kind": "invalid_client",
-    "message": "client request is not valid for the current state",
+    "kind": "local_configuration_required",
+    "message": "API settings must be applied locally through the CLI",
     "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
   }
 }
@@ -5378,8 +5373,8 @@ Response fields:
 | Field | Type | Required | Format / example / constraints | Purpose |
 |---|---|---|---|---|
 | `error` | `object` | yes | - | Machine-readable API error details. |
-| `error.kind` | `string` | yes | example: "invalid_client" | Stable machine-readable error kind. |
-| `error.message` | `string` | yes | example: "client request is not valid for the current state" | Safe human-readable error message. |
+| `error.kind` | `string` | yes | example: "local_configuration_required" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "API settings must be applied locally through the CLI" | Safe human-readable error message. |
 | `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
 
 ##### `500 Internal Server Error`
@@ -5954,6 +5949,8 @@ Response fields:
 | `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
 
 ## Configuration workflow
+
+The request model contains VPN settings only. Do not send `api` from a GET response back in PUT desired. Existing API settings in YAML are preserved. If local edits include API settings, apply them with the local CLI before using REST apply; `force` does not change this boundary. Download and restore continue to include the full configuration.
 
 Configuration uses an optimistic three-step workflow:
 

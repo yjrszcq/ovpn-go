@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Verify real editor/apply and API listener activation in an isolated container."""
-import json, os, subprocess, tempfile, time, urllib.request, urllib.error, sys
+import json, os, re, subprocess, tempfile, time, urllib.request, urllib.error, sys
 from pathlib import Path
 urllib.request.install_opener(urllib.request.build_opener(urllib.request.ProxyHandler({})))
 image = sys.argv[1] if len(sys.argv) > 1 else 'ovpn-config-api:amd64'
@@ -132,21 +132,49 @@ try:
     assert processes() == processes_before, 'Restoration restarted a managed process'
     cli('runtime', 'health')
 
-    def apply_api(change, address=None):
-        desired = json.loads(request('/api/v1/config/desired', address=address)[2])
-        applied = json.loads(request('/api/v1/config/applied', address=address)[2])
-        desired['config']['api'].update(change)
-        status, _, body = request('/api/v1/config/desired', 'PUT', desired['config'], {'If-Match': '"' + desired['digest'] + '"'}, address)
-        assert status == 200, (status, body)
-        updated = json.loads(body)
-        status, _, body = request('/api/v1/config/apply', 'POST', {'desired_digest': updated['digest'], 'current_revision': applied['revision'], 'force': False}, address=address)
-        assert status == 200, (status, body)
-        assert json.loads(body)['applied'] is True
-    apply_api({'port': 11941, 'cors': ['console.example:3000']})
+    # API listener settings do not exist in the REST write model.
+    desired = json.loads(request('/api/v1/config/desired')[2])
+    for change in [{'enabled': False}, {'listen_ip': '127.0.0.1'}, {'port': 11941}, {'cors': ['*']}]:
+        body = dict(desired['config'])
+        body['api'] = dict(desired['config']['api'], **change)
+        status, _, _ = request('/api/v1/config/desired', 'PUT', body, {'If-Match': '"' + desired['digest'] + '"'})
+        assert status == 400
+        assert json.loads(request('/api/v1/config/desired')[2]) == desired
+    # Ordinary VPN changes omit api and preserve all local listener settings.
+    vpn = dict(desired['config'])
+    del vpn['api']
+    vpn['logging'] = dict(vpn['logging'], backups=3)
+    status, _, body = request('/api/v1/config/desired', 'PUT', vpn, {'If-Match': '"' + desired['digest'] + '"'})
+    assert status == 200, (status, body)
+    updated = json.loads(body)
+    assert updated['config']['api'] == desired['config']['api']
+    status, _, body = request('/api/v1/config/apply', 'POST', {'desired_digest': updated['digest'], 'current_revision': revision, 'force': False})
+    assert status == 200 and json.loads(body)['applied'] is True, (status, body)
+    wait(lambda: cli('runtime', 'health'))
+
+    def stage_local_api(change):
+        settings = json.loads(cli('config', 'show', '-j'))['config']['api']
+        settings.update(change)
+        settings['listenIP'] = settings.pop('listen_ip')
+        content = re.sub(r'^api:.*?(?=^\S|\Z)', '', cli('config', 'export'), flags=re.M | re.S)
+        content = 'api: ' + json.dumps(settings) + '\n' + content
+        subprocess.run(['docker', 'exec', '-i', name, 'sh', '-c', 'cat > /etc/ovpn-conf/config.yaml'], input=content.encode(), check=True)
+
+    stage_local_api({'port': 11941, 'cors': ['console.example:3000']})
+    desired = json.loads(request('/api/v1/config/desired')[2])
+    applied = json.loads(request('/api/v1/config/applied')[2])
+    unchanged_pids = processes()
+    for force in [False, True]:
+        status, _, body = request('/api/v1/config/apply', 'POST', {'desired_digest': desired['digest'], 'current_revision': applied['revision'], 'force': force})
+        assert status == 422 and json.loads(body)['error']['kind'] == 'local_configuration_required', (status, body)
+    assert json.loads(request('/api/v1/config/applied')[2]) == applied
+    assert processes() == unchanged_pids
+    cli('config', 'apply', '--yes')
     wait(lambda: request('/healthz', address=newbase)[0] == 200)
     status, _, _ = request('/api/v1/state', 'OPTIONS', headers={'Origin': 'https://console.example:3000', 'Access-Control-Request-Method': 'GET'}, address=newbase)
     assert status == 204
-    apply_api({'enabled': False}, newbase)
+    stage_local_api({'enabled': False})
+    cli('config', 'apply', '--yes')
 
     def closed():
         try:
@@ -156,10 +184,11 @@ try:
             return True
     wait(closed)
     cli('runtime', 'health')
+    stage_local_api({'enabled': True})
     cli('config', 'edit', '--editor', '/etc/ovpn-conf/editor', '--apply', '--yes')
     wait(lambda: request('/healthz', address=newbase)[0] == 200)
     cli('runtime', 'health')
-    print('Actual container: YAML export/restore (valid/missing/malformed, auth, stale revision, unsafe target, concurrent lock, unchanged applied state/PIDs), editor+apply, ignored legacy API environment, disabled empty CORS, REST port/CORS update, REST disable response, CLI re-enable: PASS')
+    print('Actual container: YAML export/restore (valid/missing/malformed, auth, stale revision, unsafe target, concurrent lock, unchanged applied state/PIDs), editor+apply, ignored legacy API environment, disabled empty CORS, REST write model excludes API settings, VPN apply preserves listener, local CLI port/CORS update and disable/re-enable: PASS')
 except BaseException:
     print(docker('logs', name))
     raise

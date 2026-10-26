@@ -195,7 +195,7 @@ curl -fsS -D "$WORK_DIR/desired.headers" -H "$authorization" "$api_url/api/v1/co
 operation_count=$((operation_count + 1))
 desired_digest="$(sed -n 's/.*"digest":"\([0-9a-f]\{64\}\)".*/\1/p' "$WORK_DIR/desired.json")"
 current_revision="$(sed -n 's/.*"revision":\([0-9][0-9]*\).*/\1/p' "$WORK_DIR/applied.json")"
-desired_config="$(sed -n 's/^{"digest":"[0-9a-f]\{64\}","config":\(.*\)}$/\1/p' "$WORK_DIR/desired.json")"
+desired_config="$(sed -n 's/^{"digest":"[0-9a-f]\{64\}","config":\(.*\)}$/\1/p' "$WORK_DIR/desired.json" | sed 's/^{"api":{[^}]*},/{/')"
 test -n "$desired_digest"
 test -n "$current_revision"
 test -n "$desired_config"

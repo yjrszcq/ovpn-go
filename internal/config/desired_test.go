@@ -101,3 +101,25 @@ func TestConcurrentDesiredUpdatesAllowOneCASWinner(t *testing.T) {
 		t.Fatalf("succeeded=%d conflicted=%d", succeeded, conflicted)
 	}
 }
+
+func TestUpdateDesiredPreservesLocalAPISettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(minimalConfig + "\napi:\n  enabled: true\n  listenIP: 0.0.0.0\n  port: 11941\n  cors: [console.example]\n")
+	if err := os.WriteFile(path, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+	current, err := config.LoadDesired(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := current.Config
+	next.API = nil
+	next.Server.Endpoint = "new.example.test"
+	updated, err := config.UpdateDesiredFile(path, current.Digest, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Config.API == nil || !updated.Config.API.Enabled || updated.Config.API.ListenIP != "0.0.0.0" || updated.Config.API.Port != 11941 || len(updated.Config.API.CORS) != 1 || updated.Config.API.CORS[0] != "console.example" {
+		t.Fatalf("local API settings changed: %+v", updated.Config.API)
+	}
+}

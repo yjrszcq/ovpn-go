@@ -16,7 +16,7 @@
       emptyValue: "空",
       listenValues: "IPv4 / IPv6",
       listenDescription: "监听 IP 地址，默认仅本机。",
-      enabledDescription: "启用 REST API，通过配置 apply 生效。",
+      enabledDescription: "启用 REST API，通过本地 CLI 配置 apply 生效。",
       portDescription: "未占用的 1–65535 端口。",
       corsValues: "[host[:port], ...] / [\"*\"] / []",
       corsDescription: "YAML 来源列表，不带协议；[\"*\"] 允许任意 HTTP(S) 来源；空列表关闭 CORS。",
@@ -81,7 +81,7 @@
       emptyValue: "empty",
       listenValues: "IPv4 / IPv6",
       listenDescription: "Listen IP address; loopback by default.",
-      enabledDescription: "Enable the REST API through configuration apply.",
+      enabledDescription: "Enable the REST API through local CLI configuration apply.",
       portDescription: "An unused port from 1–65535.",
       corsValues: "[host[:port], ...] / [\"*\"] / []",
       corsDescription: "YAML list of scheme-less origins; [\"*\"] allows any HTTP(S) origin; an empty list disables CORS.",
@@ -135,6 +135,7 @@
   };
 
   const zh = {
+    "Send the previous desired digest as a quoted If-Match value and the complete VPN configuration without api as the body. Local API settings are preserved.": "将上一次期望配置摘要作为带双引号的 If-Match 值，在请求体中发送不含 api 的完整 VPN 配置；本地 API 设置保持不变。",
     "Download the applied configuration as YAML": "下载已应用配置的 YAML",
     "Restore the configured YAML file from applied state": "将已应用配置恢复到当前 YAML 文件",
     "Applied configuration as portable YAML. Does not include unapplied file edits or comments.": "可迁移的已应用配置 YAML，不包含文件中未应用的修改和注释。",

@@ -76,6 +76,7 @@ func TestConfigurationRoutesRejectMalformedPreconditionsAndJSON(t *testing.T) {
 		kind   string
 	}{
 		{http.MethodPut, "/api/v1/config/desired", `{}`, "", http.StatusBadRequest, "invalid_if_match"},
+		{http.MethodPut, "/api/v1/config/desired", `{"api":{"enabled":false}}`, `"` + testConfigurationDigest + `"`, http.StatusBadRequest, "invalid_json"},
 		{http.MethodPut, "/api/v1/config/desired", `{"unknown":true}`, `"` + testConfigurationDigest + `"`, http.StatusBadRequest, "invalid_json"},
 		{http.MethodPost, "/api/v1/config/apply", `{"desired_digest":"` + strings.ToUpper(testConfigurationDigest) + `","current_revision":4}`, "", http.StatusUnprocessableEntity, "invalid_configuration"},
 		{http.MethodPost, "/api/v1/config/apply", `{"desired_digest":"` + testConfigurationDigest + `","current_revision":4,"extra":true}`, "", http.StatusBadRequest, "invalid_json"},
@@ -100,6 +101,7 @@ func TestConfigurationErrorsAreSanitizedAndClassified(t *testing.T) {
 	}{
 		{configservice.ErrDesiredConflict, http.StatusConflict, "configuration_conflict"},
 		{configservice.ErrInvalidDesired, http.StatusUnprocessableEntity, "invalid_configuration"},
+		{configservice.ErrLocalAPIConfig, http.StatusUnprocessableEntity, "local_configuration_required"},
 		{runtimecontrol.ErrControlUnavailable, http.StatusServiceUnavailable, "runtime_unavailable"},
 		{errors.New("open /private/config.yaml: permission denied"), http.StatusInternalServerError, "internal_error"},
 	} {

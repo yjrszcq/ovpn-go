@@ -11,6 +11,7 @@ import (
 var (
 	ErrDesiredConflict = errors.New("desired configuration changed")
 	ErrInvalidDesired  = errors.New("desired configuration is invalid")
+	ErrLocalAPIConfig  = errors.New("API settings require local configuration")
 	desiredUpdateMu    sync.Mutex
 )
 
@@ -31,7 +32,8 @@ func LoadDesired(path string) (DesiredView, error) {
 	return DesiredView{Digest: digest, Config: NewView(value)}, nil
 }
 
-// UpdateDesiredFile atomically replaces desired YAML after a digest CAS check.
+// UpdateDesiredFile atomically replaces remotely writable VPN settings after
+// a digest CAS check, preserving API settings managed by local YAML/CLI.
 func UpdateDesiredFile(path, expectedDigest string, view View) (DesiredView, error) {
 	desiredUpdateMu.Lock()
 	defer desiredUpdateMu.Unlock()
@@ -43,6 +45,7 @@ func UpdateDesiredFile(path, expectedDigest string, view View) (DesiredView, err
 	if expectedDigest == "" || current.Digest != expectedDigest {
 		return DesiredView{}, ErrDesiredConflict
 	}
+	view.API = current.Config.API
 	value, err := FromView(view)
 	if err != nil {
 		return DesiredView{}, fmt.Errorf("%w: %v", ErrInvalidDesired, err)

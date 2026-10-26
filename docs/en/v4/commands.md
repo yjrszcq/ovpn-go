@@ -205,7 +205,7 @@ ovpn server run
 
 With valid configuration and empty data, initializes first, then runs in the foreground. Missing native configuration at first startup produces copy/edit instructions and exits. Initialized instances keep their applied snapshot. A duplicate startup is refused by the instance lock; it does not attach to an existing process. Use [systemd/OpenRC](native-linux.md#manual-service-registration) or Docker for long-running service management; no daemon, start/stop/restart or service registration CLI is provided.
 
-Loads the applied SQLite snapshot, recovers interrupted operations, reconciles IPv4 forwarding/firewall state, and supervises OpenVPN plus the Go broker. When applied `api.enabled` is true it also supervises `ovpn-api`; API setting changes take effect through configuration apply. TERM and INT stop all enabled children, while HUP is forwarded to OpenVPN.
+Loads the applied SQLite snapshot, recovers interrupted operations, reconciles IPv4 forwarding/firewall state, and supervises OpenVPN plus the Go broker. When applied `api.enabled` is true it also supervises `ovpn-api`; API setting changes take effect through local CLI configuration apply. TERM and INT stop all enabled children, while HUP is forwarded to OpenVPN.
 
 Missing or changed YAML causes a warning; runtime continues with the last applied database revision. Configuration is never applied at startup.
 

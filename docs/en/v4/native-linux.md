@@ -111,7 +111,7 @@ api:
   cors: []
 ```
 
-An empty `cors` list disables CORS. Use an HTTPS reverse proxy for remote access; see the [REST API guide](rest-api.md).
+API settings are managed locally; REST configuration write requests do not include them. An empty `cors` list disables CORS. Use an HTTPS reverse proxy for remote access; see the [REST API guide](rest-api.md).
 
 Create an API key for this installation:
 

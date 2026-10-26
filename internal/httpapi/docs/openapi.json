@@ -752,7 +752,7 @@
           "Configuration"
         ],
         "summary": "Replace desired configuration with CAS",
-        "description": "Send the previous desired digest as a quoted If-Match value and the complete normalized configuration as the body.",
+        "description": "Send the previous desired digest as a quoted If-Match value and the complete VPN configuration without api as the body. Local API settings are preserved.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -763,7 +763,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Configuration"
+                "$ref": "#/components/schemas/VPNConfiguration"
               },
               "example": {
                 "version": 1,
@@ -820,7 +820,8 @@
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           }
-        }
+        },
+        "x-description-zh": "将上一次期望配置摘要作为带双引号的 If-Match 值，在请求体中发送不含 api 的完整 VPN 配置；本地 API 设置保持不变。"
       }
     },
     "/api/v1/config/plan": {
@@ -862,7 +863,7 @@
           "Configuration"
         ],
         "summary": "Apply the current desired configuration online",
-        "description": "Use desired_digest from GET/PUT desired and current_revision from GET plan. The API remains available while OpenVPN and the broker restart.",
+        "description": "Use desired_digest from GET/PUT desired and current_revision from GET plan. The API remains available while OpenVPN and the broker restart. API listener settings are local-only; apply their changes through ovpn config edit -a or ovpn config apply.",
         "requestBody": {
           "required": true,
           "content": {
@@ -895,7 +896,7 @@
             "$ref": "#/components/responses/Conflict"
           },
           "422": {
-            "$ref": "#/components/responses/UnprocessableEntity"
+            "$ref": "#/components/responses/ApplyValidationError"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -903,7 +904,8 @@
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           }
-        }
+        },
+        "x-description-zh": "使用 GET/PUT desired 返回的 desired_digest 和 GET plan 返回的 current_revision。OpenVPN 和 broker 重启期间 API 保持可用。API 自身设置只能通过本地 ovpn config edit -a 或 ovpn config apply 应用。"
       }
     },
     "/api/v1/config/export": {
@@ -2014,6 +2016,32 @@
           }
         },
         "x-description-zh": "缺少版本号、覆盖确认或目标路径不安全。符号链接和目录返回 unsafe_config_target。"
+      },
+      "ApplyValidationError": {
+        "description": "Invalid apply preconditions, or local API setting changes requiring CLI apply.",
+        "headers": {
+          "X-Request-ID": {
+            "$ref": "#/components/headers/RequestID"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "error": {
+                "kind": "local_configuration_required",
+                "message": "API settings must be applied locally through the CLI",
+                "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+              }
+            }
+          }
+        },
+        "x-description-zh": "应用前提无效，或存在必须通过 CLI 应用的本地 API 设置变更。"
       }
     },
     "schemas": {
@@ -2892,7 +2920,8 @@
             "$ref": "#/components/schemas/LoggingConfiguration"
           },
           "api": {
-            "$ref": "#/components/schemas/APIConfiguration"
+            "$ref": "#/components/schemas/APIConfiguration",
+            "readOnly": true
           }
         },
         "description": "Complete normalized OpenVPN server configuration.",
@@ -3766,6 +3795,35 @@
             "x-description-zh": "必须为 true，确认丢弃 YAML 中未应用的修改和注释。"
           }
         }
+      },
+      "VPNConfiguration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "server",
+          "ipv4",
+          "logging"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1,
+            "description": "Configuration schema version. Must be 1.",
+            "x-description-zh": "配置 schema 版本，必须为 1。"
+          },
+          "server": {
+            "$ref": "#/components/schemas/ServerConfiguration"
+          },
+          "ipv4": {
+            "$ref": "#/components/schemas/IPv4Configuration"
+          },
+          "logging": {
+            "$ref": "#/components/schemas/LoggingConfiguration"
+          }
+        },
+        "description": "Remotely writable VPN configuration. Local API settings are preserved and are not accepted in this request.",
+        "x-description-zh": "可通过远程接口修改的 VPN 配置；请求不包含 API 自身设置，写入时保留本地 API 设置。"
       }
     }
   }

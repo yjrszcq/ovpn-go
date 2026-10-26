@@ -182,7 +182,7 @@ YAML
   local desired_digest current_revision
   curl -fsS -H "Authorization: Bearer $api_key" "$api_url/api/v1/config/desired" >"$protocol_dir/desired.json"
   desired_digest="$(jq -er '.digest' "$protocol_dir/desired.json")"
-  jq '.config | .logging.backups = 2' "$protocol_dir/desired.json" >"$protocol_dir/desired-update.json"
+  jq '.config | del(.api) | .logging.backups = 2' "$protocol_dir/desired.json" >"$protocol_dir/desired-update.json"
   curl -fsS -X PUT -H "Authorization: Bearer $api_key" \
     -H 'Content-Type: application/json' -H "If-Match: \"$desired_digest\"" \
     --data-binary "@$protocol_dir/desired-update.json" "$api_url/api/v1/config/desired" >"$protocol_dir/desired-updated.json"
