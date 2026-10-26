@@ -58,14 +58,26 @@ if [ "$interactive" = 1 ] && [ ! -t 0 ]; then fail 'an interactive terminal is r
 read_value() {
   local default="$2" prompt="$1"
   if [ -n "$default" ]; then prompt+=" [$default]"; fi
-  # Let read print the prompt after entering its interruptible input context.
-  # A separate printf lets an immediate Ctrl-C race with read's signal setup.
-  IFS= read -r -p "$prompt: " REPLY || {
-    if [ "$dry_run" = 1 ]; then
-      say 'Preview interrupted; answers were discarded.' '试运行中断；答案不会保留。'
-    else say 'Input interrupted; run the installer again to resume.' '输入中断；重新运行安装脚本即可继续。'; fi
-    exit 130
-  }
+  local input='' chunk status
+  # Periodically return to Bash so an interrupt arriving just before its
+  # blocking input syscall cannot leave a pending trap waiting for more input.
+  printf '%s: ' "$prompt" >&2
+  while true; do
+    # Read bytes so a timeout cannot split and discard a multibyte character.
+    if LC_ALL=C IFS= read -r -t 1 chunk; then
+      REPLY="$input$chunk"
+      break
+    else
+      status=$?
+      input+="$chunk"
+      # Bash returns 128 + SIGALRM on timeout, retaining any partial input.
+      if [ "$status" = 142 ]; then continue; fi
+      if [ "$dry_run" = 1 ]; then
+        say 'Preview interrupted; answers were discarded.' '试运行中断；答案不会保留。'
+      else say 'Input interrupted; run the installer again to resume.' '输入中断；重新运行安装脚本即可继续。'; fi
+      exit 130
+    fi
+  done
   REPLY="${REPLY:-$default}"
 }
 if [ "$interactive" = 1 ]; then

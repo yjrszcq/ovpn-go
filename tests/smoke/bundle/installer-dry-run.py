@@ -77,10 +77,9 @@ with tempfile.TemporaryDirectory(prefix='ovpn-preview-') as directory:
                              '--directory', str(target)], env=env, capture_output=True)
     assert result.returncode == 0, result.stderr
     assert not target.parent.exists()
-    # Send Ctrl-C as soon as the version label is visible, without a delay for
-    # Bash to finish printing the prompt. Separate printf/read calls can lose
-    # this interrupt during read's signal-handler setup.
-    for language in ['1', '2'] * 25:
+    # Interrupt immediately at both version selection and the service question
+    # reached after configuration has been confirmed.
+    for language, stop_at_boot in [('1', False), ('2', False), ('1', True), ('2', True)] * 25:
         master, slave = pty.openpty()
         def terminal():
             for number in (signal.SIGINT, signal.SIGQUIT, signal.SIGHUP, signal.SIGTERM):
@@ -93,23 +92,39 @@ with tempfile.TemporaryDirectory(prefix='ovpn-preview-') as directory:
                                    preexec_fn=terminal, close_fds=True)
         os.close(slave)
         output = b''
+        transcript = b''
         try:
             prompts = [('Language / 语言', language),
-                       ('操作：' if language == '2' else 'Action:', '2'),
+                       ('操作：' if language == '2' else 'Action:', '1' if stop_at_boot else '2'),
                        ('安装目录' if language == '2' else 'Installation directory', ''),
-                       ('发布版本' if language == '2' else 'Release version', None)]
+                       ('发布版本' if language == '2' else 'Release version', '' if stop_at_boot else None)]
+            if stop_at_boot:
+                labels = (['公网域名或 IP', 'VPN IPv4 网段', '传输协议', 'VPN 端口', '启用 NAT',
+                           '客户端互联网流量', 'DNS 服务器', '启用 REST API', '高级设置', '写入以上配置']
+                          if language == '2' else
+                          ['Public hostname', 'VPN IPv4 network', 'Transport protocol', 'VPN port', 'Enable NAT',
+                           'Route client Internet', 'DNS servers', 'Enable REST API', 'Advanced settings',
+                           'Write this configuration'])
+                prompts += [(label, 'vpn.example.com' if index == 0 else '') for index, label in enumerate(labels)]
+                prompts.append(('开机自动启动' if language == '2' else 'Enable service at boot', None))
             for prompt, answer in prompts:
                 deadline = time.monotonic() + 10
                 while prompt.encode() not in output:
                     assert time.monotonic() < deadline, output.decode(errors='replace')
                     if select.select([master], [], [], .1)[0]:
-                        output += os.read(master, 65536)
+                        try:
+                            chunk = os.read(master, 65536)
+                        except OSError:
+                            raise AssertionError(f'Installer exited before {prompt!r}: {transcript!r}') from None
+                        assert chunk, transcript
+                        output += chunk
+                        transcript += chunk
                 output = output.split(prompt.encode(), 1)[1]
                 os.write(master, b'\x03' if answer is None else answer.encode() + b'\n')
             try:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                raise AssertionError('Immediate Ctrl-C at version prompt did not exit') from None
+                raise AssertionError(f'Immediate Ctrl-C did not exit (language={language}, service={stop_at_boot}): {transcript!r}') from None
             assert process.returncode == 130, process.returncode
         finally:
             if process.poll() is None:
@@ -119,4 +134,4 @@ with tempfile.TemporaryDirectory(prefix='ovpn-preview-') as directory:
         assert not target.parent.exists()
         assert not (root / 'forbidden').exists()
 print('Installer dry-run: bilingual install/update/uninstall without mutations: PASS')
-print('Installer immediate Ctrl-C at version prompt: 50 bilingual sessions PASS')
+print('Installer immediate Ctrl-C at version/service prompts: 100 bilingual sessions PASS')

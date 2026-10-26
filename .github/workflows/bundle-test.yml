@@ -72,6 +72,7 @@ jobs:
           fi
           python3 tests/smoke/bundle/release-assets-test.py
           python3 tests/smoke/bundle/installer-dry-run.py
+          python3 tests/smoke/bundle/installer-input-test.py
           python3 tests/smoke/bundle/installer-rollback-test.py
           python3 tests/smoke/bundle/validation-matrix-test.py
           python3 tests/smoke/bundle/vm-console-test.py
