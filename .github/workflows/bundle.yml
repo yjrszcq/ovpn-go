@@ -1,7 +1,6 @@
 name: Linux Bundles
 
 on:
-  pull_request:
   workflow_dispatch:
     inputs:
       release_tag:
@@ -23,145 +22,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  preflight:
-    name: Fast delivery checks and validation matrix
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    outputs:
-      matrix: ${{ steps.matrix.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.release.tag_name || inputs.release_tag || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Check source, scripts and release attachment contracts
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
-          ATTACH: ${{ github.event_name == 'release' || inputs.attach }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          scripts/verify-release-metadata.sh
-          . ./versions.env
-          if [ -n "$RELEASE_TAG" ]; then
-            test "$RELEASE_TAG" = "v$IMAGE_VERSION"
-            test "$(git rev-parse HEAD)" = "$(git rev-parse "$RELEASE_TAG^{commit}")"
-          fi
-          if [ "$ATTACH" = true ]; then
-            test -n "$RELEASE_TAG"
-            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq 'select(.draft == false) | .id' | grep -Eq '^[0-9]+$'
-          fi
-          python3 tests/smoke/bundle/release-assets-test.py
-          python3 tests/smoke/bundle/installer-dry-run.py
-          python3 tests/smoke/bundle/installer-rollback-test.py
-          python3 tests/smoke/bundle/validation-matrix-test.py
-          docker run --rm -v "$PWD:/work:ro" -w /work rhysd/actionlint:1.7.7
-          docker run --rm -v "$PWD:/work:ro" -w /work koalaman/shellcheck:v0.10.0 -e SC1091,SC2016 install.sh scripts/build-bundle.sh tests/smoke/bundle/*.sh tests/smoke/container/*.sh
-          docker run --rm -v "$PWD:/work:ro" -w /work mvdan/shfmt:v3.10.0 -i 2 -d install.sh scripts/build-bundle.sh tests/smoke/bundle/*.sh tests/smoke/container/*.sh
-          docker run --rm -v "$PWD:/work:ro" -w /work mvdan/shfmt:v3.10.0 -ln posix -i 2 -d tests/smoke/bundle/portability.sh
-      - uses: actions/setup-go@v6
-        with:
-          go-version: 1.27.3
-          cache: true
-      - name: Verify Go before building either architecture
-        env:
-          GOTOOLCHAIN: local
-          GOPROXY: direct
-        run: |
-          test -z "$(gofmt -l cmd internal)"
-          go vet ./...
-          go test -race ./...
-      - name: Define every distribution and architecture acceptance job
-        id: matrix
-        run: echo "matrix=$(python3 tests/smoke/bundle/validation-matrix.py)" >> "$GITHUB_OUTPUT"
-
-  build:
-    name: Build ${{ matrix.arch }}
-    needs: preflight
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-            machine: x86_64
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            machine: aarch64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.release.tag_name || inputs.release_tag || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Check native architecture
-        env:
-          EXPECTED_MACHINE: ${{ matrix.machine }}
-        run: test "$(uname -m)" = "$EXPECTED_MACHINE"
-      - name: Build self-contained archive
-        id: bundle
-        env:
-          BUNDLE_ARCH: ${{ matrix.arch }}
-          GOPROXY: direct
-        run: |
-          scripts/build-bundle.sh "$BUNDLE_ARCH"
-          . ./versions.env
-          echo "archive=temp/dist/openvpn-server-$IMAGE_VERSION-linux-$BUNDLE_ARCH.tar.gz" >> "$GITHUB_OUTPUT"
-      - name: Upload architecture archive for acceptance
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-bundle-${{ matrix.arch }}
-          path: |
-            ${{ steps.bundle.outputs.archive }}
-            ${{ steps.bundle.outputs.archive }}.sha256
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
-
-  validate:
-    name: Validate ${{ matrix.arch }} / ${{ matrix.distribution }}
-    needs: [preflight, build]
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.preflight.outputs.matrix) }}
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.release.tag_name || inputs.release_tag || github.sha }}
-          persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: linux-bundle-${{ matrix.arch }}
-          path: temp/dist
-      - name: Verify runner and downloaded archive
-        env:
-          EXPECTED_MACHINE: ${{ matrix.machine }}
-          BUNDLE_ARCH: ${{ matrix.arch }}
-        run: |
-          test "$(uname -m)" = "$EXPECTED_MACHINE"
-          . ./versions.env
-          (cd temp/dist && sha256sum -c "openvpn-server-$IMAGE_VERSION-linux-$BUNDLE_ARCH.tar.gz.sha256")
-      - name: Verify complete functionality and actual service boot
-        env:
-          BUNDLE_ARCH: ${{ matrix.arch }}
-          BUNDLE_DISTRIBUTION: ${{ matrix.distribution }}
-        run: tests/smoke/bundle/check.sh "$BUNDLE_ARCH" "$BUNDLE_DISTRIBUTION"
-      - name: Retain acceptance and VM diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: bundle-logs-${{ matrix.arch }}-${{ matrix.distribution }}
-          path: temp/bundle-logs
-          if-no-files-found: warn
-          retention-days: 7
+  verify:
+    name: Build and test release bundles
+    uses: ./.github/workflows/bundle-test.yml
+    with:
+      release_tag: ${{ github.event.release.tag_name || inputs.release_tag || '' }}
+      verify_release: ${{ github.event_name == 'release' || inputs.attach == true }}
 
   attach:
     name: Attach complete verified asset set
-    needs: [build, validate]
+    needs: verify
     if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.attach)
     runs-on: ubuntu-latest
     permissions:
