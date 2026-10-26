@@ -19,6 +19,11 @@ type ConfigApplyRequest struct {
 	Force           bool   `json:"force"`
 }
 
+type ConfigRestoreRequest struct {
+	CurrentRevision uint64 `json:"current_revision"`
+	Confirm         bool   `json:"confirm"`
+}
+
 func (handler *handler) routeConfiguration(response http.ResponseWriter, request *http.Request, requestID string) bool {
 	path := request.URL.Path
 	if handler.resources.Applied == nil || !strings.HasPrefix(path, "/api/v1/config/") {
@@ -29,6 +34,38 @@ func (handler *handler) routeConfiguration(response http.ResponseWriter, request
 		return true
 	}
 	switch path {
+	case "/api/v1/config/export":
+		if request.Method != http.MethodGet {
+			return rejectMethod(response, requestID, http.MethodGet)
+		}
+		content, err := handler.resources.ConfigExport(request.Context())
+		if err != nil {
+			handler.writeConfigurationResult(response, nil, err, requestID)
+			return true
+		}
+		response.Header().Set("Content-Type", "application/yaml")
+		response.Header().Set("Content-Disposition", `attachment; filename="config.yaml"`)
+		_, _ = response.Write(content)
+		return true
+	case "/api/v1/config/restore":
+		if request.Method != http.MethodPost {
+			return rejectMethod(response, requestID, http.MethodPost)
+		}
+		var input ConfigRestoreRequest
+		if err := decodeJSON(response, request, &input); err != nil {
+			writeAPIError(response, http.StatusBadRequest, "invalid_json", "request body is invalid", requestID)
+			return true
+		}
+		if input.CurrentRevision == 0 || !input.Confirm {
+			writeAPIError(response, http.StatusUnprocessableEntity, "invalid_configuration", "current_revision and confirm=true are required", requestID)
+			return true
+		}
+		value, err := handler.resources.ConfigRestore(request.Context(), input)
+		if err == nil {
+			response.Header().Set("ETag", `"`+value.Digest+`"`)
+		}
+		handler.writeConfigurationResult(response, value, err, requestID)
+		return true
 	case "/api/v1/config/applied":
 		if request.Method != http.MethodGet {
 			return rejectMethod(response, requestID, http.MethodGet)
@@ -128,6 +165,8 @@ func (handler *handler) writeConfigurationResult(response http.ResponseWriter, v
 		writeAPIError(response, http.StatusServiceUnavailable, "runtime_unavailable", "runtime supervisor is unavailable", requestID)
 	case errors.Is(err, configurationservice.ErrRecoveryRequired):
 		writeAPIError(response, http.StatusConflict, "recovery_required", "interrupted operation recovery is required", requestID)
+	case errors.Is(err, configservice.ErrUnsafeTarget):
+		writeAPIError(response, http.StatusUnprocessableEntity, "unsafe_config_target", "configuration target must be a regular file", requestID)
 	case errors.Is(err, configservice.ErrInvalidDesired):
 		writeAPIError(response, http.StatusUnprocessableEntity, "invalid_configuration", "configuration is invalid", requestID)
 	default:

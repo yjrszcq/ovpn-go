@@ -51,18 +51,20 @@ type ClientMutator interface {
 }
 
 type Resources struct {
-	Version     func() VersionResponse
-	State       func(context.Context) (statecontrol.Report, error)
-	Clients     ClientReader
-	Mutations   ClientMutator
-	Runtime     func(context.Context) (runtimecontrol.Status, error)
-	Events      func(context.Context, int) ([]runtimecontrol.Event, error)
-	Disconnect  func(context.Context, string, string) (runtimecontrol.DisconnectResult, error)
-	Applied     func(context.Context) (configservice.AppliedView, error)
-	Desired     func(context.Context) (configservice.DesiredView, error)
-	PutDesired  func(context.Context, string, configservice.View) (configservice.DesiredView, error)
-	ConfigPlan  func(context.Context) (configurationservice.Plan, error)
-	ConfigApply func(context.Context, ConfigApplyRequest) (configurationservice.ApplyResult, error)
+	Version       func() VersionResponse
+	State         func(context.Context) (statecontrol.Report, error)
+	Clients       ClientReader
+	Mutations     ClientMutator
+	Runtime       func(context.Context) (runtimecontrol.Status, error)
+	Events        func(context.Context, int) ([]runtimecontrol.Event, error)
+	Disconnect    func(context.Context, string, string) (runtimecontrol.DisconnectResult, error)
+	Applied       func(context.Context) (configservice.AppliedView, error)
+	Desired       func(context.Context) (configservice.DesiredView, error)
+	PutDesired    func(context.Context, string, configservice.View) (configservice.DesiredView, error)
+	ConfigExport  func(context.Context) ([]byte, error)
+	ConfigRestore func(context.Context, ConfigRestoreRequest) (configservice.AppliedView, error)
+	ConfigPlan    func(context.Context) (configurationservice.Plan, error)
+	ConfigApply   func(context.Context, ConfigApplyRequest) (configurationservice.ApplyResult, error)
 }
 
 type VersionResponse struct {
@@ -136,12 +138,14 @@ func NewHandler(authenticator Authenticator, allowedOrigins []string, resources 
 		resources.PutDesired != nil,
 		resources.ConfigPlan != nil,
 		resources.ConfigApply != nil,
+		resources.ConfigExport != nil,
+		resources.ConfigRestore != nil,
 	} {
 		if available {
 			configurationResources++
 		}
 	}
-	if configurationResources != 0 && configurationResources != 5 {
+	if configurationResources != 0 && configurationResources != 7 {
 		return nil, errors.New("API configuration resources must be provided together")
 	}
 	origins := make(map[string]struct{}, len(allowedOrigins))

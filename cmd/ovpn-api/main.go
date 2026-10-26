@@ -196,6 +196,16 @@ func newResources(database *storesqlite.Store, instanceID, dataDir string) (http
 			}
 			return configservice.Show(instance.Applied)
 		},
+		ConfigExport: func(ctx context.Context) ([]byte, error) {
+			instance, err := database.LoadOnlyInstance(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return configservice.ExportYAML(instance.Applied)
+		},
+		ConfigRestore: func(ctx context.Context, input httpapi.ConfigRestoreRequest) (configservice.AppliedView, error) {
+			return configurationservice.Restore(ctx, database, dataDir, configPath, configservice.Revision(input.CurrentRevision))
+		},
 		Desired: func(context.Context) (configservice.DesiredView, error) { return configservice.LoadDesired(configPath) },
 		PutDesired: func(_ context.Context, expected string, view configservice.View) (configservice.DesiredView, error) {
 			return configservice.UpdateDesiredFile(configPath, expected, view)

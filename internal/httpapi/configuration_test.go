@@ -128,6 +128,10 @@ func TestConfigurationResourcesMustBeComplete(t *testing.T) {
 
 func testConfigurationResources() Resources {
 	return Resources{
+		ConfigExport: func(context.Context) ([]byte, error) { return []byte("version: 1\n"), nil },
+		ConfigRestore: func(_ context.Context, input ConfigRestoreRequest) (configservice.AppliedView, error) {
+			return configservice.AppliedView{Revision: configservice.Revision(input.CurrentRevision), Digest: testConfigurationDigest}, nil
+		},
 		Applied: func(context.Context) (configservice.AppliedView, error) {
 			return configservice.AppliedView{Revision: 4, Digest: testConfigurationDigest}, nil
 		},
@@ -162,4 +166,43 @@ func authenticatedConfigurationRequest(method, path, body string) *http.Request 
 		request.Header.Set("Content-Type", "application/json")
 	}
 	return request
+}
+
+func TestConfigurationExportAndRestoreRoutes(t *testing.T) {
+	handler := newConfigurationHandler(t, testConfigurationResources())
+	for _, test := range []struct {
+		method, path, body string
+		status             int
+	}{
+		{"GET", "/api/v1/config/export", "", 200},
+		{"POST", "/api/v1/config/restore", `{"current_revision":4,"confirm":true}`, 200},
+		{"POST", "/api/v1/config/restore", `{"current_revision":4}`, 422},
+		{"POST", "/api/v1/config/restore", `{"confirm":true}`, 422},
+		{"POST", "/api/v1/config/restore", `{"current_revision":4,"confirm":true,"force":true}`, 400},
+		{"POST", "/api/v1/config/restore", `{`, 400},
+		{"GET", "/api/v1/config/restore", "", 405},
+		{"POST", "/api/v1/config/export", "", 405},
+		{"GET", "/api/v1/config/export?format=json", "", 400},
+	} {
+		request := authenticatedConfigurationRequest(test.method, test.path, test.body)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != test.status {
+			t.Fatalf("%+v status=%d body=%s", test, response.Code, response.Body.String())
+		}
+		if test.status == 200 && test.path == "/api/v1/config/export" {
+			if response.Header().Get("Content-Type") != "application/yaml" || response.Header().Get("Content-Disposition") != `attachment; filename="config.yaml"` || response.Body.String() != "version: 1\n" {
+				t.Fatalf("invalid download: %v %s", response.Header(), response.Body.String())
+			}
+		}
+		if test.status == 200 && test.path == "/api/v1/config/restore" && response.Header().Get("ETag") != `"`+testConfigurationDigest+`"` {
+			t.Fatal("missing restore ETag")
+		}
+		request.Header.Del("Authorization")
+		unauthorized := httptest.NewRecorder()
+		handler.ServeHTTP(unauthorized, request)
+		if unauthorized.Code != 401 {
+			t.Fatalf("unauthenticated %s accepted: %d", test.path, unauthorized.Code)
+		}
+	}
 }
