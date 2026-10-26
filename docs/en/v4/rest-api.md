@@ -6,10 +6,12 @@ The API is disabled by default. It uses HTTP internally and does not manage TLS 
 
 When enabled, the API serves development documentation directly:
 
-- `http://<listenIP>:<port>/docs/` is the frontend reference. Each of the 22 operations independently shows its complete HTTP request, parameters, body fields, success response, error responses, and JSON examples; developers do not have to assemble a call from grouped models. It follows the browser language by default (Chinese for Chinese browser locales and English otherwise), with a persistent manual switch in the top bar.
+- `http://<listenIP>:<port>/docs/` is the frontend reference. Each of the 24 operations independently shows its complete HTTP request, parameters, body fields, success response, error responses, and JSON examples; developers do not have to assemble a call from grouped models. It follows the browser language by default (Chinese for Chinese browser locales and English otherwise), with a persistent manual switch in the top bar.
 - `http://<listenIP>:<port>/docs/openapi.json` is the OpenAPI 3.1 contract for Orval, OpenAPI Generator, NSwag, and API clients.
 
 Documentation is public because it contains only the API contract. Actual `/api/v1/*` resources still require an API key.
+
+To download YAML, use GET `/api/v1/config/export`. To discard unapplied edits, first read `revision` from GET `/api/v1/config/applied`, then send POST `/api/v1/config/restore` with `{"current_revision":12,"confirm":true}` (replace 12 with that revision). The API restores only the configured YAML, including missing or malformed files; SQLite and live processes remain unchanged. A stale revision or busy instance returns 409; missing confirmation or an unsafe target returns 422. Default generation before initialization is a local CLI operation (`ovpn config export -r`); this authenticated API requires initialized state. Local editors and service-manager commands remain CLI/host operations.
 
 ## Enable the API
 
@@ -81,7 +83,7 @@ Do not send keys in URLs, query strings, cookies, or request bodies.
 
 ## Per-operation requests and responses
 
-All 22 operations are documented as independent contracts. Every operation lists its Header, Path, Query, and JSON Body parameters with location, type, required status, format, example, constraints, and purpose. Every response status includes its content type, example, and fields. All requests except `/healthz` require a Bearer API key.
+All 24 operations are documented as independent contracts. Every operation lists its Header, Path, Query, and JSON Body parameters with location, type, required status, format, example, constraints, and purpose. Every response status includes its content type, example, and fields. All requests except `/healthz` require a Bearer API key.
 
 ### 1. `GET /healthz`
 
@@ -5244,6 +5246,720 @@ Response fields:
 | `plan.firewall.reconcile` | `boolean` | yes | example: false | Whether firewall state must be reconciled during apply. |
 | `plan.firewall.before` | `object \| null` | yes | - | Firewall state before apply, or null for initial configuration. |
 | `plan.firewall.after` | `object \| null` | yes | - | Firewall state required by the desired configuration, or null when absent. |
+
+##### `400 Bad Request`
+
+Malformed path, query, header, media type, body, or JSON.
+
+Content type: `application/json`
+
+Response example:
+
+```json
+{
+  "error": {
+    "kind": "invalid_json",
+    "message": "request body is invalid",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `error` | `object` | yes | - | Machine-readable API error details. |
+| `error.kind` | `string` | yes | example: "invalid_json" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "request body is invalid" | Safe human-readable error message. |
+| `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
+
+##### `401 Unauthorized`
+
+Bearer API key is missing, malformed, unknown, or deleted.
+
+Content type: `application/json`
+
+Response example:
+
+```json
+{
+  "error": {
+    "kind": "unauthenticated",
+    "message": "API key is missing or invalid",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `error` | `object` | yes | - | Machine-readable API error details. |
+| `error.kind` | `string` | yes | example: "unauthenticated" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "API key is missing or invalid" | Safe human-readable error message. |
+| `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
+
+##### `405 Method Not Allowed`
+
+HTTP method is not accepted; inspect the Allow header.
+
+Content type: `application/json`
+
+Response example:
+
+```json
+{
+  "error": {
+    "kind": "method_not_allowed",
+    "message": "method is not allowed",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `error` | `object` | yes | - | Machine-readable API error details. |
+| `error.kind` | `string` | yes | example: "method_not_allowed" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "method is not allowed" | Safe human-readable error message. |
+| `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
+
+##### `409 Conflict`
+
+Digest, revision, state, uniqueness, lock, or recovery conflict.
+
+Content type: `application/json`
+
+Response example:
+
+```json
+{
+  "error": {
+    "kind": "configuration_conflict",
+    "message": "configuration state changed or is busy",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `error` | `object` | yes | - | Machine-readable API error details. |
+| `error.kind` | `string` | yes | example: "configuration_conflict" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "configuration state changed or is busy" | Safe human-readable error message. |
+| `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
+
+##### `422 Unprocessable Entity`
+
+JSON is valid but violates client, IPv4, or configuration semantics.
+
+Content type: `application/json`
+
+Response example:
+
+```json
+{
+  "error": {
+    "kind": "invalid_client",
+    "message": "client request is not valid for the current state",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `error` | `object` | yes | - | Machine-readable API error details. |
+| `error.kind` | `string` | yes | example: "invalid_client" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "client request is not valid for the current state" | Safe human-readable error message. |
+| `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
+
+##### `500 Internal Server Error`
+
+Unclassified internal failure with no implementation details exposed.
+
+Content type: `application/json`
+
+Response example:
+
+```json
+{
+  "error": {
+    "kind": "internal_error",
+    "message": "request could not be completed",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `error` | `object` | yes | - | Machine-readable API error details. |
+| `error.kind` | `string` | yes | example: "internal_error" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "request could not be completed" | Safe human-readable error message. |
+| `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
+
+##### `503 Service Unavailable`
+
+Authentication storage, PKI, OpenVPN, broker, supervisor, or another required dependency is unavailable.
+
+Content type: `application/json`
+
+Response example:
+
+```json
+{
+  "error": {
+    "kind": "runtime_unavailable",
+    "message": "OpenVPN runtime is unavailable",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `error` | `object` | yes | - | Machine-readable API error details. |
+| `error.kind` | `string` | yes | example: "runtime_unavailable" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "OpenVPN runtime is unavailable" | Safe human-readable error message. |
+| `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
+
+## Configuration workflow
+
+Configuration uses an optimistic three-step workflow:
+
+```text
+PUT desired -> GET plan -> POST apply
+```
+
+First read desired configuration. The response body contains `digest` and `config`; the same digest is returned as a quoted `ETag`:
+
+```bash
+curl -H "Authorization: Bearer $OVPN_API_KEY" \
+  https://vpn-admin.example.com/api/v1/config/desired
+```
+
+To replace desired YAML, send the complete normalized `config` object as the request body and the previously observed digest in `If-Match`:
+
+```http
+PUT /api/v1/config/desired HTTP/1.1
+Authorization: Bearer ...
+Content-Type: application/json
+If-Match: "<64-character-lowercase-digest>"
+
+{
+  "version": 1,
+  "server": {
+    "endpoint": "vpn.example.com",
+    "protocol": "udp",
+    "family": "auto",
+    "port": 1194,
+    "client_to_client": true
+  },
+  "ipv4": {
+    "network": "10.42.0.0/24",
+    "dynamic_pool_size": 64,
+    "nat_enabled": false,
+    "nat_interface": "auto",
+    "redirect_gateway": false,
+    "dns": [],
+    "routes": []
+  },
+  "logging": {"max_bytes": 10485760, "backups": 5}
+}
+```
+
+The API validates the same domain rules as YAML, writes canonical mode-`0600` YAML through an atomic rename, and returns the new digest and `ETag`. A stale digest returns `409` without replacing the file.
+
+Review `/api/v1/config/plan`, then apply exactly that desired digest and the plan's `configuration.current_revision`:
+
+```json
+{
+  "desired_digest": "<64-character-lowercase-digest>",
+  "current_revision": 12,
+  "force": false
+}
+```
+
+Apply performs the normal health preflight, asks the supervisor to pause OpenVPN and the broker, rechecks digest and revision, runs the existing journaled transaction under exclusive locks, and restarts the managed runtime. The API process remains available during this operation. `force: true` bypasses only a reviewed health-preflight false negative; it does not bypass schema, path, lock, concurrency, or recovery checks.
+
+Digest changes, applied revision changes, held mutation locks, and stale plan state return `409`. An unavailable supervisor returns `503`.
+
+## Errors
+
+Errors use one stable envelope and never include internal paths, SQL, request bodies, credentials, or Go causes:
+
+```json
+{
+  "error": {
+    "kind": "client_not_found",
+    "message": "client was not found",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+| Status | Meaning |
+|---|---|
+| `400` | Invalid path, query, JSON, media type, body, or concurrency header. |
+| `401` | Missing, malformed, unknown, or deleted API key. |
+| `404` | Resource or client not found. |
+| `405` | Method not allowed; inspect the `Allow` header. |
+| `409` | Digest, revision, state, constraint, lock, or recovery conflict. |
+| `422` | Valid JSON with invalid client, IPv4, or configuration semantics. |
+| `503` | Authentication storage, OpenVPN, broker, supervisor, or another required dependency is unavailable. |
+| `500` | Unclassified internal failure. |
+
+Use `request_id` to correlate a failed call without recording its Authorization header or body.
+
+## Security boundary
+
+- Keep `api.enabled: false` when remote management is not required.
+- Bind to loopback or a private management network and terminate TLS at a trusted reverse proxy.
+- Restrict reverse-proxy and host firewall access independently of API authentication.
+- Use a distinct API key per integration and delete unused keys promptly.
+- Never expose API keys or profiles to logs, browser storage, telemetry, source control, or chat systems.
+- Back up SQLite, YAML, PKI, artifacts, and keys as one coordinated operational unit; the REST API is not a backup interface.
+- API v1 has no users, sessions, RBAC, key scopes, key expiry, asynchronous jobs, or built-in TLS.
+
+### 23. `GET /api/v1/config/export`
+
+Download the applied configuration as YAML. Applied configuration as portable YAML. Does not include unapplied file edits or comments.
+
+#### Request parameters
+
+##### Header parameters
+
+| Field | Location | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|---|
+| `Authorization` | `header` | `string` | yes | Bearer ovpn_v1.<uuid>.<secret> | API authentication credential. Put the service-generated API key after Bearer. |
+
+#### Request example
+
+```http
+GET /api/v1/config/export HTTP/1.1
+Authorization: Bearer ovpn_v1.<uuid>.<secret>
+```
+
+#### Responses
+
+##### `200 OK`
+
+Applied configuration as portable YAML. Does not include unapplied file edits or comments.
+
+Content type: `application/yaml`
+
+`Content-Disposition: attachment; filename="config.yaml"`
+
+Response example:
+
+```yaml
+version: 1
+server:
+  endpoint: vpn.example.com
+  transport:
+    protocol: udp
+    family: auto
+    port: 1194
+  clientToClient: true
+ipv4:
+  network: 10.42.0.0/24
+  dynamicPoolSize: 64
+  nat:
+    enabled: false
+    interface: auto
+  redirectGateway: false
+  dns: []
+  routes: []
+logging:
+  maxBytes: 10485760
+  backups: 5
+```
+
+Response fields:
+
+| Field | Type | Purpose |
+|---|---|---|
+| body | string | Complete configuration YAML, suitable for the configured file. |
+
+##### `400 Bad Request`
+
+Malformed path, query, header, media type, body, or JSON.
+
+Content type: `application/json`
+
+Response example:
+
+```json
+{
+  "error": {
+    "kind": "invalid_json",
+    "message": "request body is invalid",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `error` | `object` | yes | - | Machine-readable API error details. |
+| `error.kind` | `string` | yes | example: "invalid_json" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "request body is invalid" | Safe human-readable error message. |
+| `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
+
+##### `401 Unauthorized`
+
+Bearer API key is missing, malformed, unknown, or deleted.
+
+Content type: `application/json`
+
+Response example:
+
+```json
+{
+  "error": {
+    "kind": "unauthenticated",
+    "message": "API key is missing or invalid",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `error` | `object` | yes | - | Machine-readable API error details. |
+| `error.kind` | `string` | yes | example: "unauthenticated" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "API key is missing or invalid" | Safe human-readable error message. |
+| `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
+
+##### `405 Method Not Allowed`
+
+HTTP method is not accepted; inspect the Allow header.
+
+Content type: `application/json`
+
+Response example:
+
+```json
+{
+  "error": {
+    "kind": "method_not_allowed",
+    "message": "method is not allowed",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `error` | `object` | yes | - | Machine-readable API error details. |
+| `error.kind` | `string` | yes | example: "method_not_allowed" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "method is not allowed" | Safe human-readable error message. |
+| `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
+
+##### `409 Conflict`
+
+Digest, revision, state, uniqueness, lock, or recovery conflict.
+
+Content type: `application/json`
+
+Response example:
+
+```json
+{
+  "error": {
+    "kind": "configuration_conflict",
+    "message": "configuration state changed or is busy",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `error` | `object` | yes | - | Machine-readable API error details. |
+| `error.kind` | `string` | yes | example: "configuration_conflict" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "configuration state changed or is busy" | Safe human-readable error message. |
+| `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
+
+##### `500 Internal Server Error`
+
+Unclassified internal failure with no implementation details exposed.
+
+Content type: `application/json`
+
+Response example:
+
+```json
+{
+  "error": {
+    "kind": "internal_error",
+    "message": "request could not be completed",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `error` | `object` | yes | - | Machine-readable API error details. |
+| `error.kind` | `string` | yes | example: "internal_error" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "request could not be completed" | Safe human-readable error message. |
+| `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
+
+##### `503 Service Unavailable`
+
+Authentication storage, PKI, OpenVPN, broker, supervisor, or another required dependency is unavailable.
+
+Content type: `application/json`
+
+Response example:
+
+```json
+{
+  "error": {
+    "kind": "runtime_unavailable",
+    "message": "OpenVPN runtime is unavailable",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `error` | `object` | yes | - | Machine-readable API error details. |
+| `error.kind` | `string` | yes | example: "runtime_unavailable" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "OpenVPN runtime is unavailable" | Safe human-readable error message. |
+| `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
+
+## Configuration workflow
+
+Configuration uses an optimistic three-step workflow:
+
+```text
+PUT desired -> GET plan -> POST apply
+```
+
+First read desired configuration. The response body contains `digest` and `config`; the same digest is returned as a quoted `ETag`:
+
+```bash
+curl -H "Authorization: Bearer $OVPN_API_KEY" \
+  https://vpn-admin.example.com/api/v1/config/desired
+```
+
+To replace desired YAML, send the complete normalized `config` object as the request body and the previously observed digest in `If-Match`:
+
+```http
+PUT /api/v1/config/desired HTTP/1.1
+Authorization: Bearer ...
+Content-Type: application/json
+If-Match: "<64-character-lowercase-digest>"
+
+{
+  "version": 1,
+  "server": {
+    "endpoint": "vpn.example.com",
+    "protocol": "udp",
+    "family": "auto",
+    "port": 1194,
+    "client_to_client": true
+  },
+  "ipv4": {
+    "network": "10.42.0.0/24",
+    "dynamic_pool_size": 64,
+    "nat_enabled": false,
+    "nat_interface": "auto",
+    "redirect_gateway": false,
+    "dns": [],
+    "routes": []
+  },
+  "logging": {"max_bytes": 10485760, "backups": 5}
+}
+```
+
+The API validates the same domain rules as YAML, writes canonical mode-`0600` YAML through an atomic rename, and returns the new digest and `ETag`. A stale digest returns `409` without replacing the file.
+
+Review `/api/v1/config/plan`, then apply exactly that desired digest and the plan's `configuration.current_revision`:
+
+```json
+{
+  "desired_digest": "<64-character-lowercase-digest>",
+  "current_revision": 12,
+  "force": false
+}
+```
+
+Apply performs the normal health preflight, asks the supervisor to pause OpenVPN and the broker, rechecks digest and revision, runs the existing journaled transaction under exclusive locks, and restarts the managed runtime. The API process remains available during this operation. `force: true` bypasses only a reviewed health-preflight false negative; it does not bypass schema, path, lock, concurrency, or recovery checks.
+
+Digest changes, applied revision changes, held mutation locks, and stale plan state return `409`. An unavailable supervisor returns `503`.
+
+## Errors
+
+Errors use one stable envelope and never include internal paths, SQL, request bodies, credentials, or Go causes:
+
+```json
+{
+  "error": {
+    "kind": "client_not_found",
+    "message": "client was not found",
+    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+  }
+}
+```
+
+| Status | Meaning |
+|---|---|
+| `400` | Invalid path, query, JSON, media type, body, or concurrency header. |
+| `401` | Missing, malformed, unknown, or deleted API key. |
+| `404` | Resource or client not found. |
+| `405` | Method not allowed; inspect the `Allow` header. |
+| `409` | Digest, revision, state, constraint, lock, or recovery conflict. |
+| `422` | Valid JSON with invalid client, IPv4, or configuration semantics. |
+| `503` | Authentication storage, OpenVPN, broker, supervisor, or another required dependency is unavailable. |
+| `500` | Unclassified internal failure. |
+
+Use `request_id` to correlate a failed call without recording its Authorization header or body.
+
+## Security boundary
+
+- Keep `api.enabled: false` when remote management is not required.
+- Bind to loopback or a private management network and terminate TLS at a trusted reverse proxy.
+- Restrict reverse-proxy and host firewall access independently of API authentication.
+- Use a distinct API key per integration and delete unused keys promptly.
+- Never expose API keys or profiles to logs, browser storage, telemetry, source control, or chat systems.
+- Back up SQLite, YAML, PKI, artifacts, and keys as one coordinated operational unit; the REST API is not a backup interface.
+- API v1 has no users, sessions, RBAC, key scopes, key expiry, asynchronous jobs, or built-in TLS.
+
+### 24. `POST /api/v1/config/restore`
+
+Restore the configured YAML file from applied state. Requires an initialized instance. Explicitly confirm discarding unapplied file edits and send current_revision from GET applied. Restores missing or malformed YAML without applying configuration, changing SQLite, or restarting services. Refuses stale revisions, unsafe targets and interrupted operations.
+
+#### Request parameters
+
+##### Header parameters
+
+| Field | Location | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|---|
+| `Authorization` | `header` | `string` | yes | Bearer ovpn_v1.<uuid>.<secret> | API authentication credential. Put the service-generated API key after Bearer. |
+| `Content-Type` | `header` | `string` | yes | application/json | Declares that the request body uses JSON. |
+
+##### JSON body fields
+
+| Field | Location | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|---|
+| `current_revision` | `body` | `integer` | yes | minimum: 1; example: 12 | Current applied revision returned by GET applied. |
+
+| `confirm` | `body` | `boolean` | yes | constant: true | Must be true to discard unapplied YAML edits and comments. |
+
+#### Request example
+
+```http
+POST /api/v1/config/restore HTTP/1.1
+Authorization: Bearer ovpn_v1.<uuid>.<secret>
+Content-Type: application/json
+
+{
+  "current_revision": 12,
+  "confirm": true
+}
+```
+
+#### Responses
+
+##### `200 OK`
+
+Applied revision and normalized configuration.
+
+Content type: `application/json`
+
+`ETag: "<digest>"`
+
+Response example:
+
+```json
+{
+  "revision": 12,
+  "digest": "be7ed82796b39a77ce949201a4d9483cf09e56648f14b8b9b192bb83d2c4d042",
+  "config": {
+    "version": 1,
+    "server": {
+      "endpoint": "vpn.example.com",
+      "protocol": "udp",
+      "family": "auto",
+      "port": 1194,
+      "client_to_client": true
+    },
+    "ipv4": {
+      "network": "10.42.0.0/24",
+      "dynamic_pool_size": 64,
+      "nat_enabled": false,
+      "nat_interface": "auto",
+      "redirect_gateway": false,
+      "dns": [],
+      "routes": []
+    },
+    "logging": {
+      "max_bytes": 10485760,
+      "backups": 5
+    }
+  }
+}
+```
+
+Response fields:
+
+| Field | Type | Required | Format / example / constraints | Purpose |
+|---|---|---|---|---|
+| `revision` | `integer` | yes | minimum: 1; example: 12 | Monotonic applied configuration revision. |
+| `digest` | `string` | yes | format: ^[0-9a-f]{64}$; example: "be7ed82796b39a77ce949201a4d9483cf09e56648f14b8b9b192bb83d2c4d042" | Lowercase SHA-256 digest identifying an exact desired configuration. |
+| `config` | `object` | yes | - | Complete normalized OpenVPN server configuration. |
+| `config.version` | `integer` | yes | constant: 1 | Configuration schema version. Must be 1. |
+| `config.server` | `object` | yes | - | OpenVPN listener and transport settings. |
+| `config.server.endpoint` | `string` | yes | example: "vpn.example.com" | Public hostname or IP address placed in generated client profiles. |
+| `config.server.protocol` | `"udp" \| "tcp"` | yes | values: "udp" \| "tcp" | OpenVPN transport protocol. |
+| `config.server.family` | `"auto" \| "ipv4" \| "ipv6"` | yes | values: "auto" \| "ipv4" \| "ipv6" | Address family used for the server transport. |
+| `config.server.port` | `integer` | yes | minimum: 1; maximum: 65535; example: 1194 | OpenVPN listener port. |
+| `config.server.client_to_client` | `boolean` | yes | example: true | Whether connected VPN clients may communicate directly. |
+| `config.ipv4` | `object` | yes | - | Server IPv4 network, allocation, NAT, DNS, and route settings. |
+| `config.ipv4.network` | `string` | yes | format: ipv4-cidr; example: "10.42.0.0/24" | VPN IPv4 network in CIDR notation. |
+| `config.ipv4.dynamic_pool_size` | `integer` | yes | minimum: 0; example: 64 | Number of addresses reserved for dynamic allocation. |
+| `config.ipv4.nat_enabled` | `boolean` | yes | example: false | Whether outbound traffic from the VPN network is masqueraded. |
+| `config.ipv4.nat_interface` | `string` | yes | example: "auto" | Outbound interface for NAT, or auto for automatic detection. |
+| `config.ipv4.redirect_gateway` | `boolean` | yes | example: false | Whether generated profiles redirect the default IPv4 route through VPN. |
+| `config.ipv4.dns` | `string[]` | yes | example: [] | IPv4 DNS servers pushed to clients. |
+| `config.ipv4.routes` | `string[]` | yes | example: [] | Additional IPv4 CIDR routes pushed to clients. |
+| `config.api` | `object` | no | - | REST API settings; omitted for defaults. |
+| `config.api.enabled` | `boolean` | yes if api present | default: false | Enable the listener. |
+| `config.api.listen_ip` | `string` | yes if api present | default: 127.0.0.1 | IPv4 or IPv6 listen address. |
+| `config.api.port` | `integer` | yes if api present | 1–65535; default: 11940 | Listening port. |
+| `config.api.cors` | `string[]` | yes if api present | default: [] | Empty disables CORS; scheme-less origins or ["*"]. |
+| `config.logging` | `object` | yes | - | Runtime log rotation settings. |
+| `config.logging.max_bytes` | `integer` | yes | minimum: 1; example: 10485760 | Maximum active log file size before rotation. |
+| `config.logging.backups` | `integer` | yes | minimum: 0; example: 5 | Number of rotated log files retained. |
 
 ##### `400 Bad Request`
 

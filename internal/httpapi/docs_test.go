@@ -182,8 +182,8 @@ func TestEmbeddedDocumentationDescribesEveryOperation(t *testing.T) {
 			}
 		}
 	}
-	if count != 22 {
-		t.Fatalf("embedded operations=%d want=22", count)
+	if count != 24 {
+		t.Fatalf("embedded operations=%d want=24", count)
 	}
 }
 

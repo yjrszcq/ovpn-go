@@ -60,6 +60,8 @@ sudo ovpn config export -r
 sudo ovpn config export -r -y
 ```
 
+REST API 同步提供 `GET /api/v1/config/export` 下载 YAML，以及 `POST /api/v1/config/restore` 恢复当前配置文件（需 `current_revision` 和 `confirm: true`）。恢复不执行 apply、不重启；已初始化的 API 仍在运行时，也可恢复缺失或损坏的 YAML。详见 [API 文档](rest-api.md)。
+
 从 SQLite 中最后已应用的配置恢复 `config/config.yaml`，可覆盖无效 YAML 或重建丢失的文件。未应用修改和注释会被丢弃；数据库和运行服务保持不变，无需再次 apply。初始化前（数据目录为空或不存在）则生成默认配置，不创建数据库；请先修改示例公网地址 `server.endpoint: vpn.example.com` 再启动。
 
 ### 首次初始化与配置应用

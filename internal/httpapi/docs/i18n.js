@@ -135,6 +135,15 @@
   };
 
   const zh = {
+    "Download the applied configuration as YAML": "下载已应用配置的 YAML",
+    "Restore the configured YAML file from applied state": "将已应用配置恢复到当前 YAML 文件",
+    "Applied configuration as portable YAML. Does not include unapplied file edits or comments.": "可迁移的已应用配置 YAML，不包含文件中未应用的修改和注释。",
+    "Requires an initialized instance. Explicitly confirm discarding unapplied file edits and send current_revision from GET applied. Restores missing or malformed YAML without applying configuration, changing SQLite, or restarting services. Refuses stale revisions, unsafe targets and interrupted operations.": "实例必须已初始化。明确确认丢弃文件中未应用的修改，并发送 GET applied 返回的 current_revision。可恢复缺失或损坏的 YAML，不应用配置、不修改 SQLite、不重启服务；版本过期、不安全的目标路径和未完成的操作会被拒绝。",
+    "Restore request with an applied revision and explicit overwrite confirmation.": "包含已应用版本号和明确覆盖确认的恢复请求。",
+    "Current applied revision returned by GET applied.": "GET applied 返回的当前已应用版本号。",
+    "Must be true to discard unapplied YAML edits and comments.": "必须为 true，确认丢弃 YAML 中未应用的修改和注释。",
+    "Configuration YAML attachment filename.": "配置 YAML 附件文件名。",
+
     "API key created locally with `ovpn api key create`.": "使用 `ovpn api key create` 在本地创建的 API key。",
     "API process is alive.": "API 进程正常运行。",
     "Accepted methods for the resource.": "该资源允许使用的方法。",

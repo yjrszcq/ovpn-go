@@ -275,6 +275,8 @@ YAML 发生漂移但未 apply 时，重启仍使用旧 applied revision 并输�
 docker exec openvpn ovpn config export -r -y
 ```
 
+REST API 同步提供 `GET /api/v1/config/export` 下载 YAML，以及 `POST /api/v1/config/restore` 恢复当前配置文件（需 `current_revision` 和 `confirm: true`）。恢复不执行 apply、不重启；已初始化的 API 仍在运行时，也可恢复缺失或损坏的 YAML。详见 [API 文档](rest-api.md)。
+
 用数据库中的最后已应用配置覆盖当前 YAML；也可恢复损坏或丢失的文件。初始化前的数据目录为空或不存在时，改为生成默认 YAML；启动前需修改示例公网地址。此操作会丢弃未应用修改和注释，不修改数据库或重启服务，无需再次 apply。省略 `-y` 时需使用 `docker exec -it` 进行交互确认。
 
 ### 导出 applied 配置

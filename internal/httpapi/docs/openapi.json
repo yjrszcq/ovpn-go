@@ -905,6 +905,89 @@
           }
         }
       }
+    },
+    "/api/v1/config/export": {
+      "get": {
+        "operationId": "exportConfiguration",
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "Download the applied configuration as YAML",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ExportConfigurationResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "description": "Applied configuration as portable YAML. Does not include unapplied file edits or comments."
+      }
+    },
+    "/api/v1/config/restore": {
+      "post": {
+        "operationId": "restoreConfiguration",
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "Restore the configured YAML file from applied state",
+        "description": "Requires an initialized instance. Explicitly confirm discarding unapplied file edits and send current_revision from GET applied. Restores missing or malformed YAML without applying configuration, changing SQLite, or restarting services. Refuses stale revisions, unsafe targets and interrupted operations.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreConfigurationRequest"
+              },
+              "example": {
+                "current_revision": 12,
+                "confirm": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/RestoreConfigurationResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1846,6 +1929,62 @@
                 "message": "OpenVPN runtime is unavailable",
                 "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
               }
+            }
+          }
+        }
+      },
+      "ExportConfigurationResponse": {
+        "description": "Applied configuration as portable YAML. Does not include unapplied file edits or comments.",
+        "headers": {
+          "X-Request-ID": {
+            "$ref": "#/components/headers/RequestID"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          },
+          "Content-Disposition": {
+            "description": "Configuration YAML attachment filename.",
+            "x-description-zh": "配置 YAML 附件文件名。",
+            "schema": {
+              "type": "string",
+              "example": "attachment; filename=\"config.yaml\""
+            }
+          }
+        },
+        "content": {
+          "application/yaml": {
+            "schema": {
+              "type": "string",
+              "description": "Applied configuration as portable YAML. Does not include unapplied file edits or comments.",
+              "x-description-zh": "可迁移的已应用配置 YAML，不包含文件中未应用的修改和注释。"
+            },
+            "example": "version: 1\nserver:\n  endpoint: vpn.example.com\n  transport:\n    protocol: udp\n    family: auto\n    port: 1194\n  clientToClient: true\nipv4:\n  network: 10.42.0.0/24\n  dynamicPoolSize: 64\n  nat:\n    enabled: false\n    interface: auto\n  redirectGateway: false\n  dns: []\n  routes: []\nlogging:\n  maxBytes: 10485760\n  backups: 5\n"
+          }
+        },
+        "x-description-zh": "可迁移的已应用配置 YAML，不包含文件中未应用的修改和注释。"
+      },
+      "RestoreConfigurationResponse": {
+        "description": "Applied revision and normalized configuration.",
+        "headers": {
+          "X-Request-ID": {
+            "$ref": "#/components/headers/RequestID"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          },
+          "ETag": {
+            "description": "Quoted SHA-256 digest of the restored configuration.",
+            "x-description-zh": "恢复后的配置 SHA-256 摘要（含双引号）。",
+            "schema": {
+              "type": "string",
+              "pattern": "^\"[0-9a-f]{64}\"$"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AppliedConfiguration"
             }
           }
         }
@@ -3573,6 +3712,32 @@
             "default": [],
             "description": "Scheme-less host[:port] origins, or [\"*\"]. Empty disables CORS.",
             "x-description-zh": "不带协议的 host[:port] 来源列表，或 [\"*\"]。空列表关闭 CORS。"
+          }
+        }
+      },
+      "RestoreConfigurationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Restore request with an applied revision and explicit overwrite confirmation.",
+        "x-description-zh": "包含已应用版本号和明确覆盖确认的恢复请求。",
+        "required": [
+          "current_revision",
+          "confirm"
+        ],
+        "properties": {
+          "current_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "example": 12,
+            "description": "Current applied revision returned by GET applied.",
+            "x-description-zh": "GET applied 返回的当前已应用版本号。"
+          },
+          "confirm": {
+            "type": "boolean",
+            "const": true,
+            "example": true,
+            "description": "Must be true to discard unapplied YAML edits and comments.",
+            "x-description-zh": "必须为 true，确认丢弃 YAML 中未应用的修改和注释。"
           }
         }
       }

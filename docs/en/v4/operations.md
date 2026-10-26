@@ -277,6 +277,8 @@ If YAML differs but has not been applied, restarting the server continues with t
 docker exec openvpn ovpn config export -r -y
 ```
 
+The REST API also supports `GET /api/v1/config/export` (YAML download) and `POST /api/v1/config/restore` (restore the configured file using `current_revision` and `confirm: true`). Restoration does not apply or restart anything; missing or malformed YAML can be restored while the initialized API remains running. See the [API reference](rest-api.md).
+
 Overwrite the current YAML with the last applied database configuration, including recovery of invalid or missing files. Before initialization, an empty or absent data directory produces default YAML instead; edit the example public endpoint before starting. Discards unapplied edits and comments, without changing SQLite or restarting the service; no apply is needed afterward. Omit `-y` and use `docker exec -it` for interactive confirmation.
 
 ### Export the applied configuration

@@ -132,6 +132,8 @@ chmod 600 laptop.ovpn
 
 使用 `sudo ovpn config export -r` 将数据库中最后已应用的配置写回 YAML，撤销未应用的修改；Docker 使用 `docker exec -it openvpn ovpn config export -r`。`-y/--yes` 跳过交互确认。此操作会丢弃文件中的未应用修改和注释，不修改数据库、不重启服务。初始化前数据目录为空或不存在时，则生成默认配置；请先修改示例公网地址再启动。
 
+REST API 同步提供 `GET /api/v1/config/export` 下载 YAML，以及 `POST /api/v1/config/restore` 恢复当前配置文件（需 `current_revision` 和 `confirm: true`）。恢复不执行 apply、不重启；已初始化的 API 仍在运行时，也可恢复缺失或损坏的 YAML。详见 [API 文档](docs/cn/v4/rest-api.md)。
+
 运行 `sudo ovpn config edit` 编辑配置；`-e/--editor` 指定编辑器，`-p/--plan` 编辑后查看计划，`-a/--apply` 编辑后应用。Docker 使用 `docker exec -it openvpn ovpn config edit`。API 设置保存在配置文件中，默认关闭：
 
 ```yaml

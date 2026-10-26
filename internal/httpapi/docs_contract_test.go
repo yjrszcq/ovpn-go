@@ -31,6 +31,8 @@ func TestOpenAPIContractCoversImplementedOperations(t *testing.T) {
 		"/api/v1/clients/{client_id}/disconnect": {"post"},
 		"/api/v1/runtime":                        {"get"},
 		"/api/v1/runtime/events":                 {"get"},
+		"/api/v1/config/export":                  {"get"},
+		"/api/v1/config/restore":                 {"post"},
 		"/api/v1/config/applied":                 {"get"},
 		"/api/v1/config/desired":                 {"get", "put"},
 		"/api/v1/config/plan":                    {"get"},
@@ -76,8 +78,8 @@ func TestOpenAPIContractCoversImplementedOperations(t *testing.T) {
 			}
 		}
 	}
-	if operationCount != 22 {
-		t.Fatalf("operations=%d want=22", operationCount)
+	if operationCount != 24 {
+		t.Fatalf("operations=%d want=24", operationCount)
 	}
 	resolveLocalReferences(t, document, document, "#")
 }
@@ -96,6 +98,7 @@ func TestOpenAPIMutationsDocumentRequestBodies(t *testing.T) {
 		"put /api/v1/clients/{client_id}/ipv4",
 		"put /api/v1/config/desired",
 		"post /api/v1/config/apply",
+		"post /api/v1/config/restore",
 	} {
 		parts := strings.SplitN(operation, " ", 2)
 		value := object(t, object(t, paths[parts[1]], parts[1])[parts[0]], operation)
@@ -262,7 +265,7 @@ func TestFrontendGuidesDocumentEachOperationIndependently(t *testing.T) {
 				}
 			}
 		}
-		if count != 22 || strings.Count(markdown, "\n### ") != 22 || strings.Count(markdown, requestParameters) != 22 || strings.Count(markdown, requestExample) != 22 || strings.Count(markdown, responsesHeading) != 22 {
+		if count != 24 || strings.Count(markdown, "\n### ") != 24 || strings.Count(markdown, requestParameters) != 24 || strings.Count(markdown, requestExample) != 24 || strings.Count(markdown, responsesHeading) != 24 {
 			t.Fatalf("%s operation sections=%d OpenAPI operations=%d", guide, strings.Count(markdown, "\n### "), count)
 		}
 		if strings.Contains(markdown, "Host: vpn-admin.example.com") {

@@ -60,6 +60,8 @@ sudo ovpn config export -r
 sudo ovpn config export -r -y
 ```
 
+The REST API also supports `GET /api/v1/config/export` (YAML download) and `POST /api/v1/config/restore` (restore the configured file using `current_revision` and `confirm: true`). Restoration does not apply or restart anything; missing or malformed YAML can be restored while the initialized API remains running. See the [API reference](rest-api.md).
+
 Restore `config/config.yaml` from the last applied SQLite configuration, including invalid or missing files. Discards unapplied edits and comments, leaving SQLite and the running service unchanged; no apply is needed afterward. Before initialization (an empty or absent data directory), generates defaults without creating a database; edit `server.endpoint: vpn.example.com` before starting.
 
 ### First initialization and configuration application
