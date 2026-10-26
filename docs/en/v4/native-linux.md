@@ -55,9 +55,9 @@ Without arguments, `ovpn` shows the command tree without initialization. `server
 ### Discard unapplied edits
 
 ```bash
-sudo ovpn config restore
+sudo ovpn config export -r
 # When overwriting is already confirmed:
-sudo ovpn config restore -y
+sudo ovpn config export -r -y
 ```
 
 Restore `config/config.yaml` from the last applied SQLite configuration, including invalid or missing files. Discards unapplied edits and comments, leaving SQLite and the running service unchanged; no apply is needed afterward. Before initialization (an empty or absent data directory), generates defaults without creating a database; edit `server.endpoint: vpn.example.com` before starting.

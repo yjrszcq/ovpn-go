@@ -274,7 +274,7 @@ If YAML differs but has not been applied, restarting the server continues with t
 ### Discard unapplied configuration edits
 
 ```bash
-docker exec openvpn ovpn config restore -y
+docker exec openvpn ovpn config export -r -y
 ```
 
 Overwrite the current YAML with the last applied database configuration, including recovery of invalid or missing files. Before initialization, an empty or absent data directory produces default YAML instead; edit the example public endpoint before starting. Discards unapplied edits and comments, without changing SQLite or restarting the service; no apply is needed afterward. Omit `-y` and use `docker exec -it` for interactive confirmation.

@@ -132,7 +132,7 @@ Import the resulting profile into an OpenVPN client. Profiles contain private ke
 
 ## Configuration editing and REST API
 
-Use `sudo ovpn config restore` to restore YAML from the last applied database configuration and discard unapplied edits; for Docker use `docker exec -it openvpn ovpn config restore`. `-y/--yes` skips interactive confirmation. Discards unapplied edits and comments without changing SQLite or restarting the service. Before initialization, an empty or absent data directory produces default configuration instead; edit the example public endpoint before starting.
+Use `sudo ovpn config export -r` to restore YAML from the last applied database configuration and discard unapplied edits; for Docker use `docker exec -it openvpn ovpn config export -r`. `-y/--yes` skips interactive confirmation. Discards unapplied edits and comments without changing SQLite or restarting the service. Before initialization, an empty or absent data directory produces default configuration instead; edit the example public endpoint before starting.
 
 Run `sudo ovpn config edit` to edit configuration. Use `-e/--editor` to choose an editor, `-p/--plan` to plan after editing or `-a/--apply` to apply after editing. For Docker use `docker exec -it openvpn ovpn config edit`. API settings are stored in YAML and default to disabled:
 

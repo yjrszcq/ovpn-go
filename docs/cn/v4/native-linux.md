@@ -55,9 +55,9 @@ sudo /opt/ovpn/ovpn server run
 ### 撤销未应用的修改
 
 ```bash
-sudo ovpn config restore
+sudo ovpn config export -r
 # 已确认覆盖时：
-sudo ovpn config restore -y
+sudo ovpn config export -r -y
 ```
 
 从 SQLite 中最后已应用的配置恢复 `config/config.yaml`，可覆盖无效 YAML 或重建丢失的文件。未应用修改和注释会被丢弃；数据库和运行服务保持不变，无需再次 apply。初始化前（数据目录为空或不存在）则生成默认配置，不创建数据库；请先修改示例公网地址 `server.endpoint: vpn.example.com` 再启动。

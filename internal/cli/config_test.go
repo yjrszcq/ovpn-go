@@ -74,6 +74,38 @@ func TestConfigQueryUsageAndJSONErrors(t *testing.T) {
 	}
 }
 
+func TestConfigExportRestoreUsagePreservesFiles(t *testing.T) {
+	root, path := createConfigurationFixture(t)
+	t.Setenv("OVPN_DATA_DIR", root)
+	t.Setenv("OVPN_CONFIG_FILE", path)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"config", "restore", "-y"},
+		{"config", "export", "-y"},
+		{"config", "export", "--raw"},
+		{"config", "export", "-r", "--restore", "-y"},
+		{"config", "export", "-r", "-y", "--yes"},
+		{"config", "export", "-r", "-o", path, "-y"},
+		{"config", "export", "-o", "-", "--restore"},
+		{"config", "export", "-o", ""},
+	} {
+		code, stdout, stderr := run(args...)
+		if code != 64 || stdout != "" {
+			t.Fatalf("args=%v code=%d stdout=%q stderr=%q", args, code, stdout, stderr)
+		}
+		after, err := os.ReadFile(path)
+		if err != nil || string(after) != string(before) {
+			t.Fatalf("invalid args changed config: %v", args)
+		}
+	}
+	if code, _, _ := run("config", "export", "-o", path); code == 0 {
+		t.Fatal("ordinary export overwrote existing YAML")
+	}
+}
+
 func TestConfigRestoreReplacesInvalidOrMissingYAMLFromAppliedState(t *testing.T) {
 	root, path := createConfigurationFixture(t)
 	t.Setenv("OVPN_DATA_DIR", root)
@@ -90,7 +122,7 @@ func TestConfigRestoreReplacesInvalidOrMissingYAMLFromAppliedState(t *testing.T)
 		} else if err := os.WriteFile(path, []byte("# unapplied edits\ninvalid: ["), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		code, stdout, stderr := run("config", "restore", "-y")
+		code, stdout, stderr := run("config", "export", "-r", "-y")
 		if code != 0 || stderr != "" || !strings.Contains(stdout, "applied revision 1") {
 			t.Fatalf("restore code=%d stdout=%q stderr=%q", code, stdout, stderr)
 		}
@@ -122,7 +154,7 @@ func TestConfigRestoreRejectsDamagedStateAndPreservesFile(t *testing.T) {
 	}
 	t.Setenv("OVPN_DATA_DIR", root)
 	t.Setenv("OVPN_CONFIG_FILE", path)
-	if code, _, _ := run("config", "restore", "-y"); code == 0 {
+	if code, _, _ := run("config", "export", "-r", "-y"); code == 0 {
 		t.Fatal("restore succeeded without applied state")
 	}
 	after, err := os.ReadFile(path)
@@ -137,7 +169,7 @@ func TestConfigRestoreBeforeInitializationGeneratesExampleDefaults(t *testing.T)
 	dataDir := filepath.Join(root, "uninitialized")
 	t.Setenv("OVPN_DATA_DIR", dataDir)
 	t.Setenv("OVPN_CONFIG_FILE", path)
-	code, stdout, stderr := run("config", "restore", "-y")
+	code, stdout, stderr := run("config", "export", "-r", "-y")
 	if code != 0 || stderr != "" || !strings.Contains(stdout, "Edit server.endpoint") {
 		t.Fatalf("default restore code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -148,6 +180,9 @@ func TestConfigRestoreBeforeInitializationGeneratesExampleDefaults(t *testing.T)
 	example, err := configservice.LoadDesired(filepath.Join("..", "..", "config.example.yaml"))
 	if err != nil || generated.Digest != example.Digest {
 		t.Fatalf("defaults differ from example: generated=%+v example=%+v err=%v", generated, example, err)
+	}
+	if code, _, _ := run("config", "export", "-o", "-"); code == 0 {
+		t.Fatal("ordinary export succeeded without initialized state")
 	}
 	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
 		t.Fatalf("default restore initialized data: %v", err)
@@ -163,7 +198,7 @@ func TestConfigRestoreRequiresConfirmationAndRefusesUnsafeTargets(t *testing.T) 
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{nil, {"-y", "--yes"}, {"--output", "other.yaml"}} {
-		code, _, _ := run(append([]string{"config", "restore"}, args...)...)
+		code, _, _ := run(append([]string{"config", "export", "-r"}, args...)...)
 		if code == 0 {
 			t.Fatalf("unexpected restore success for %v", args)
 		}
@@ -178,7 +213,7 @@ func TestConfigRestoreRequiresConfirmationAndRefusesUnsafeTargets(t *testing.T) 
 	}
 	for _, target := range []string{link, root} {
 		t.Setenv("OVPN_CONFIG_FILE", target)
-		code, _, _ := run("config", "restore", "--yes")
+		code, _, _ := run("config", "export", "--restore", "--yes")
 		if code == 0 {
 			t.Fatalf("unsafe restore target accepted: %s", target)
 		}

@@ -13,14 +13,7 @@ import (
 	"github.com/yjrszcq/ovpn-go/internal/initialize"
 )
 
-func runConfigRestore(args []string, stdout, stderr io.Writer) int {
-	yes := false
-	for _, arg := range args {
-		if canonicalOption(arg) != "--yes" || yes {
-			return writeError(stderr, usageError("usage: ovpn config restore [--yes|-y]"))
-		}
-		yes = true
-	}
+func restoreConfiguration(yes bool, stdout, stderr io.Writer) int {
 	empty, err := dataDirectoryEmpty(environmentOr("OVPN_DATA_DIR", initialize.DefaultDataDir))
 	if err != nil {
 		return writeConfigurationError(stderr, err, false)
@@ -54,7 +47,7 @@ func runConfigRestore(args []string, stdout, stderr io.Writer) int {
 	if !yes {
 		confirmed, err := confirmAction(stderr, fmt.Sprintf("Type yes to overwrite %s with %s, discarding file edits and comments: ", path, source))
 		if err != nil || !confirmed {
-			return writeError(stderr, apperror.Wrap(apperror.ExitPolicy, "confirmation_required", "config restore requires confirmation or --yes", err))
+			return writeError(stderr, apperror.Wrap(apperror.ExitPolicy, "confirmation_required", "config export --restore requires confirmation or --yes", err))
 		}
 	}
 	if err := restoreConfigFile(path, content); err != nil {

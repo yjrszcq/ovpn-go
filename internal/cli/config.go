@@ -57,12 +57,41 @@ func runConfigShow(args []string, stdout, stderr io.Writer) int {
 
 func runConfigExport(args []string, stdout, stderr io.Writer) int {
 	output := ""
+	restore, yes := false, false
+	usage := func() int {
+		return writeError(stderr, usageError("usage: ovpn config export [--output|-o FILE|- | --restore|-r [--yes|-y]]"))
+	}
 	for index := 0; index < len(args); index++ {
-		if canonicalOption(args[index]) != "--output" || index+1 >= len(args) || output != "" {
-			return writeError(stderr, usageError("usage: ovpn config export [--output FILE|-]"))
+		option := canonicalOption(args[index])
+		if args[index] == "-r" {
+			option = "--restore"
 		}
-		output = args[index+1]
-		index++
+		switch option {
+		case "--output":
+			if index+1 >= len(args) || output != "" || args[index+1] == "" {
+				return usage()
+			}
+			index++
+			output = args[index]
+		case "--restore":
+			if restore {
+				return usage()
+			}
+			restore = true
+		case "--yes":
+			if yes {
+				return usage()
+			}
+			yes = true
+		default:
+			return usage()
+		}
+	}
+	if restore && output != "" || yes && !restore {
+		return usage()
+	}
+	if restore {
+		return restoreConfiguration(yes, stdout, stderr)
 	}
 	store, instance, err := openConfigurationState(context.Background())
 	if err != nil {

@@ -85,7 +85,7 @@ maintenance 服务的 entrypoint 已经是 `ovpn`，因此 `<command>` 直接从
 | `75` | 锁、busy 状态或临时资源冲突 |
 | `78` | schema、状态、确认或安全策略拒绝 |
 
-`migrate apply`、`config apply`、`config restore`、`repair apply`、`client delete` 和批量地址编辑必须交互确认或带 `--yes`；非 TTY 未带 `--yes` 时直接拒绝。
+`migrate apply`、`config apply`、`config export -r`、`repair apply`、`client delete` 和批量地址编辑必须交互确认或带 `--yes`；非 TTY 未带 `--yes` 时直接拒绝。
 
 mutation 会先执行只读验证、目标选择和 plan，再请求确认。无效请求不会弹出确认；no-op plan 不需要 `--yes`，直接成功退出。人类模式错误在安全时给出下一步 hint，JSON 错误保持稳定对象格式。
 
@@ -130,8 +130,7 @@ ovpn
 │   ├── edit            使用编辑器编辑配置，可选编辑后 plan 或 apply。
 │   ├── validate        验证期望 YAML 配置。
 │   ├── show            显示 applied SQLite 配置。
-│   ├── export          将 applied 配置导出为 YAML。
-│   ├── restore         将数据库中的 applied 配置写回 YAML，撤销未应用修改。
+│   ├── export          导出 applied YAML；--restore 写回当前配置文件。
 │   ├── plan            规划期望配置到 applied 配置的变更。
 │   └── apply           应用配置并重启受管 runtime。
 ├── client
@@ -249,16 +248,16 @@ ovpn config show [--json|-j]
 语法：
 
 ```text
-ovpn config export [--output|-o FILE|-]
+ovpn config export [--output|-o FILE|- | --restore|-r [--yes|-y]]
 ```
 
-从 applied SQLite 快照输出完整 YAML v1。schema 3 迁移实例若没有 v4 YAML，迁移后必须执行该命令。文件输出以 `0600` 新建且绝不覆盖已有文件；替换现有 YAML 时应输出到 stdout，经宿主临时文件再改名。
+默认从 applied SQLite 快照输出完整 YAML v1 到终端；`--output/-o FILE` 以 `0600` 新建文件，拒绝覆盖已有文件。schema 3 迁移实例若没有 v4 YAML，迁移后可用此命令导出配置。`--restore/-r` 改为恢复当前配置文件，与 `--output/-o` 互斥；`--yes/-y` 仅用于恢复模式。
 
-### `ovpn config restore`
+**恢复当前配置文件**
 
 ```bash
-ovpn config restore
-ovpn config restore -y
+ovpn config export -r
+ovpn config export -r -y
 ```
 
 将 SQLite 中最后已应用的配置写回当前配置文件（由 `OVPN_CONFIG_FILE` 指定），用于撤销尚未 apply 的修改。需要交互确认，或使用 `--yes/-y`。即使文件已损坏或丢失也可恢复，父目录必须存在且可写。初始化前（数据目录为空或不存在）则生成与配置示例一致的默认 YAML，不创建数据库；请在启动前修改示例公网地址 `server.endpoint: vpn.example.com`。已有非空但损坏或不完整的数据会报错，不会被视为未初始化。

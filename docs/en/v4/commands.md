@@ -85,7 +85,7 @@ Human client output uses 12 hexadecimal UUID characters by default; `--full-id/-
 | `75` | lock, busy state, or temporary resource conflict |
 | `78` | schema, state, confirmation, or security policy refusal |
 
-`migrate apply`, `config apply`, `config restore`, `repair apply`, `client delete`, and batch address editing require interactive confirmation or `--yes`. A non-TTY call without `--yes` is refused.
+`migrate apply`, `config apply`, `config export -r`, `repair apply`, `client delete`, and batch address editing require interactive confirmation or `--yes`. A non-TTY call without `--yes` is refused.
 
 Mutations perform read-only validation, target selection, and planning before asking for confirmation. Invalid requests never prompt, and a no-op plan exits successfully without requiring `--yes`. Human errors include an actionable hint where one is safe; JSON errors retain their stable object form.
 
@@ -130,8 +130,7 @@ ovpn
 │   ├── edit            Edit configuration; optionally plan or apply after editing.
 │   ├── validate        Validate the desired YAML configuration.
 │   ├── show            Show the applied SQLite configuration.
-│   ├── export          Export the applied configuration as YAML.
-│   ├── restore         Restore YAML from applied SQLite state, discarding unapplied edits.
+│   ├── export          Export applied YAML; --restore writes it back to the configuration file.
 │   ├── plan            Plan desired-to-applied configuration changes.
 │   └── apply           Apply configuration and restart the managed runtime.
 ├── client
@@ -249,16 +248,16 @@ Displays the normalized applied configuration, revision, and SHA-256 digest from
 Syntax:
 
 ```text
-ovpn config export [--output|-o FILE|-]
+ovpn config export [--output|-o FILE|- | --restore|-r [--yes|-y]]
 ```
 
-Writes a complete YAML v1 document from the applied SQLite snapshot. This is required after schema 3 migration if the instance did not already have v4 YAML. A file output is created with mode `0600` and is never overwritten; use stdout plus a temporary host file when replacing an existing YAML document.
+Exports complete YAML v1 from the applied SQLite snapshot to stdout by default. `--output/-o FILE` creates a new file with mode `0600` and refuses to overwrite existing files. Schema 3 migrations without v4 YAML can use this command to export configuration. `--restore/-r` instead restores the current configuration file and is mutually exclusive with `--output/-o`; `--yes/-y` is only valid in restore mode.
 
-### `ovpn config restore`
+**Restore the current configuration file**
 
 ```bash
-ovpn config restore
-ovpn config restore -y
+ovpn config export -r
+ovpn config export -r -y
 ```
 
 Write the last applied SQLite configuration back to the current configuration file (`OVPN_CONFIG_FILE`), discarding edits that have not been applied. Requires interactive confirmation or `--yes/-y`. Invalid or missing YAML can be restored, and the parent directory must exist and be writable. Before initialization (an empty or absent data directory), generates the example defaults without creating a database; edit `server.endpoint: vpn.example.com` before starting. Existing nonempty but damaged or incomplete data is refused rather than treated as uninitialized.
