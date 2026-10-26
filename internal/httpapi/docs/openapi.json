@@ -978,7 +978,7 @@
             "$ref": "#/components/responses/Conflict"
           },
           "422": {
-            "$ref": "#/components/responses/UnprocessableEntity"
+            "$ref": "#/components/responses/RestoreValidationError"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -1988,6 +1988,32 @@
             }
           }
         }
+      },
+      "RestoreValidationError": {
+        "description": "Missing revision/confirmation or an unsafe target. A symbolic link or directory returns kind unsafe_config_target.",
+        "headers": {
+          "X-Request-ID": {
+            "$ref": "#/components/headers/RequestID"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "error": {
+                "kind": "invalid_configuration",
+                "message": "current_revision and confirm=true are required",
+                "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
+              }
+            }
+          }
+        },
+        "x-description-zh": "缺少版本号、覆盖确认或目标路径不安全。符号链接和目录返回 unsafe_config_target。"
       }
     },
     "schemas": {

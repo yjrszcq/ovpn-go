@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	configservice "github.com/yjrszcq/ovpn-go/internal/config"
 )
 
 func TestOpenAPIContractCoversImplementedOperations(t *testing.T) {
@@ -200,6 +202,15 @@ func TestFrontendGuidesDocumentEachOperationIndependently(t *testing.T) {
 			t.Fatalf("read %s: %v", guide, err)
 		}
 		markdown := string(content)
+		headings := map[string]bool{}
+		for _, line := range strings.Split(markdown, "\n") {
+			if strings.HasPrefix(line, "## ") {
+				if headings[line] {
+					t.Fatalf("%s duplicates section %q", guide, line)
+				}
+				headings[line] = true
+			}
+		}
 		requestParameters := "#### Request parameters"
 		requestExample := "#### Request example"
 		responsesHeading := "#### Responses"
@@ -397,5 +408,23 @@ func resolveLocalReferences(t *testing.T, root map[string]any, value any, locati
 		for index, nested := range typed {
 			resolveLocalReferences(t, root, nested, fmt.Sprintf("%s/%d", location, index))
 		}
+	}
+}
+
+func TestOpenAPIExportExampleIsLoadableConfiguration(t *testing.T) {
+	var document map[string]any
+	if err := json.Unmarshal(openAPIDocument(t), &document); err != nil {
+		t.Fatal(err)
+	}
+	components := object(t, document["components"], "components")
+	responses := object(t, components["responses"], "responses")
+	response := object(t, responses["ExportConfigurationResponse"], "export response")
+	media := object(t, object(t, response["content"], "content")["application/yaml"], "YAML")
+	example, ok := media["example"].(string)
+	if !ok {
+		t.Fatal("missing YAML example")
+	}
+	if _, err := configservice.Parse([]byte(example)); err != nil {
+		t.Fatalf("download example is not valid configuration: %v", err)
 	}
 }

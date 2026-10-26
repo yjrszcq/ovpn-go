@@ -5436,104 +5436,6 @@ Response fields:
 | `error.message` | `string` | yes | example: "OpenVPN runtime is unavailable" | Safe human-readable error message. |
 | `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
 
-## Configuration workflow
-
-Configuration uses an optimistic three-step workflow:
-
-```text
-PUT desired -> GET plan -> POST apply
-```
-
-First read desired configuration. The response body contains `digest` and `config`; the same digest is returned as a quoted `ETag`:
-
-```bash
-curl -H "Authorization: Bearer $OVPN_API_KEY" \
-  https://vpn-admin.example.com/api/v1/config/desired
-```
-
-To replace desired YAML, send the complete normalized `config` object as the request body and the previously observed digest in `If-Match`:
-
-```http
-PUT /api/v1/config/desired HTTP/1.1
-Authorization: Bearer ...
-Content-Type: application/json
-If-Match: "<64-character-lowercase-digest>"
-
-{
-  "version": 1,
-  "server": {
-    "endpoint": "vpn.example.com",
-    "protocol": "udp",
-    "family": "auto",
-    "port": 1194,
-    "client_to_client": true
-  },
-  "ipv4": {
-    "network": "10.42.0.0/24",
-    "dynamic_pool_size": 64,
-    "nat_enabled": false,
-    "nat_interface": "auto",
-    "redirect_gateway": false,
-    "dns": [],
-    "routes": []
-  },
-  "logging": {"max_bytes": 10485760, "backups": 5}
-}
-```
-
-The API validates the same domain rules as YAML, writes canonical mode-`0600` YAML through an atomic rename, and returns the new digest and `ETag`. A stale digest returns `409` without replacing the file.
-
-Review `/api/v1/config/plan`, then apply exactly that desired digest and the plan's `configuration.current_revision`:
-
-```json
-{
-  "desired_digest": "<64-character-lowercase-digest>",
-  "current_revision": 12,
-  "force": false
-}
-```
-
-Apply performs the normal health preflight, asks the supervisor to pause OpenVPN and the broker, rechecks digest and revision, runs the existing journaled transaction under exclusive locks, and restarts the managed runtime. The API process remains available during this operation. `force: true` bypasses only a reviewed health-preflight false negative; it does not bypass schema, path, lock, concurrency, or recovery checks.
-
-Digest changes, applied revision changes, held mutation locks, and stale plan state return `409`. An unavailable supervisor returns `503`.
-
-## Errors
-
-Errors use one stable envelope and never include internal paths, SQL, request bodies, credentials, or Go causes:
-
-```json
-{
-  "error": {
-    "kind": "client_not_found",
-    "message": "client was not found",
-    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
-  }
-}
-```
-
-| Status | Meaning |
-|---|---|
-| `400` | Invalid path, query, JSON, media type, body, or concurrency header. |
-| `401` | Missing, malformed, unknown, or deleted API key. |
-| `404` | Resource or client not found. |
-| `405` | Method not allowed; inspect the `Allow` header. |
-| `409` | Digest, revision, state, constraint, lock, or recovery conflict. |
-| `422` | Valid JSON with invalid client, IPv4, or configuration semantics. |
-| `503` | Authentication storage, OpenVPN, broker, supervisor, or another required dependency is unavailable. |
-| `500` | Unclassified internal failure. |
-
-Use `request_id` to correlate a failed call without recording its Authorization header or body.
-
-## Security boundary
-
-- Keep `api.enabled: false` when remote management is not required.
-- Bind to loopback or a private management network and terminate TLS at a trusted reverse proxy.
-- Restrict reverse-proxy and host firewall access independently of API authentication.
-- Use a distinct API key per integration and delete unused keys promptly.
-- Never expose API keys or profiles to logs, browser storage, telemetry, source control, or chat systems.
-- Back up SQLite, YAML, PKI, artifacts, and keys as one coordinated operational unit; the REST API is not a backup interface.
-- API v1 has no users, sessions, RBAC, key scopes, key expiry, asynchronous jobs, or built-in TLS.
-
 ### 23. `GET /api/v1/config/export`
 
 Download the applied configuration as YAML. Applied configuration as portable YAML. Does not include unapplied file edits or comments.
@@ -5756,104 +5658,6 @@ Response fields:
 | `error.message` | `string` | yes | example: "OpenVPN runtime is unavailable" | Safe human-readable error message. |
 | `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
 
-## Configuration workflow
-
-Configuration uses an optimistic three-step workflow:
-
-```text
-PUT desired -> GET plan -> POST apply
-```
-
-First read desired configuration. The response body contains `digest` and `config`; the same digest is returned as a quoted `ETag`:
-
-```bash
-curl -H "Authorization: Bearer $OVPN_API_KEY" \
-  https://vpn-admin.example.com/api/v1/config/desired
-```
-
-To replace desired YAML, send the complete normalized `config` object as the request body and the previously observed digest in `If-Match`:
-
-```http
-PUT /api/v1/config/desired HTTP/1.1
-Authorization: Bearer ...
-Content-Type: application/json
-If-Match: "<64-character-lowercase-digest>"
-
-{
-  "version": 1,
-  "server": {
-    "endpoint": "vpn.example.com",
-    "protocol": "udp",
-    "family": "auto",
-    "port": 1194,
-    "client_to_client": true
-  },
-  "ipv4": {
-    "network": "10.42.0.0/24",
-    "dynamic_pool_size": 64,
-    "nat_enabled": false,
-    "nat_interface": "auto",
-    "redirect_gateway": false,
-    "dns": [],
-    "routes": []
-  },
-  "logging": {"max_bytes": 10485760, "backups": 5}
-}
-```
-
-The API validates the same domain rules as YAML, writes canonical mode-`0600` YAML through an atomic rename, and returns the new digest and `ETag`. A stale digest returns `409` without replacing the file.
-
-Review `/api/v1/config/plan`, then apply exactly that desired digest and the plan's `configuration.current_revision`:
-
-```json
-{
-  "desired_digest": "<64-character-lowercase-digest>",
-  "current_revision": 12,
-  "force": false
-}
-```
-
-Apply performs the normal health preflight, asks the supervisor to pause OpenVPN and the broker, rechecks digest and revision, runs the existing journaled transaction under exclusive locks, and restarts the managed runtime. The API process remains available during this operation. `force: true` bypasses only a reviewed health-preflight false negative; it does not bypass schema, path, lock, concurrency, or recovery checks.
-
-Digest changes, applied revision changes, held mutation locks, and stale plan state return `409`. An unavailable supervisor returns `503`.
-
-## Errors
-
-Errors use one stable envelope and never include internal paths, SQL, request bodies, credentials, or Go causes:
-
-```json
-{
-  "error": {
-    "kind": "client_not_found",
-    "message": "client was not found",
-    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
-  }
-}
-```
-
-| Status | Meaning |
-|---|---|
-| `400` | Invalid path, query, JSON, media type, body, or concurrency header. |
-| `401` | Missing, malformed, unknown, or deleted API key. |
-| `404` | Resource or client not found. |
-| `405` | Method not allowed; inspect the `Allow` header. |
-| `409` | Digest, revision, state, constraint, lock, or recovery conflict. |
-| `422` | Valid JSON with invalid client, IPv4, or configuration semantics. |
-| `503` | Authentication storage, OpenVPN, broker, supervisor, or another required dependency is unavailable. |
-| `500` | Unclassified internal failure. |
-
-Use `request_id` to correlate a failed call without recording its Authorization header or body.
-
-## Security boundary
-
-- Keep `api.enabled: false` when remote management is not required.
-- Bind to loopback or a private management network and terminate TLS at a trusted reverse proxy.
-- Restrict reverse-proxy and host firewall access independently of API authentication.
-- Use a distinct API key per integration and delete unused keys promptly.
-- Never expose API keys or profiles to logs, browser storage, telemetry, source control, or chat systems.
-- Back up SQLite, YAML, PKI, artifacts, and keys as one coordinated operational unit; the REST API is not a backup interface.
-- API v1 has no users, sessions, RBAC, key scopes, key expiry, asynchronous jobs, or built-in TLS.
-
 ### 24. `POST /api/v1/config/restore`
 
 Restore the configured YAML file from applied state. Requires an initialized instance. Explicitly confirm discarding unapplied file edits and send current_revision from GET applied. Restores missing or malformed YAML without applying configuration, changing SQLite, or restarting services. Refuses stale revisions, unsafe targets and interrupted operations.
@@ -5872,7 +5676,6 @@ Restore the configured YAML file from applied state. Requires an initialized ins
 | Field | Location | Type | Required | Format / example / constraints | Purpose |
 |---|---|---|---|---|---|
 | `current_revision` | `body` | `integer` | yes | minimum: 1; example: 12 | Current applied revision returned by GET applied. |
-
 | `confirm` | `body` | `boolean` | yes | constant: true | Must be true to discard unapplied YAML edits and comments. |
 
 #### Request example
@@ -6071,7 +5874,7 @@ Response fields:
 
 ##### `422 Unprocessable Entity`
 
-JSON is valid but violates client, IPv4, or configuration semantics.
+Missing revision/confirmation or an unsafe target. A symbolic link or directory returns kind unsafe_config_target.
 
 Content type: `application/json`
 
@@ -6080,8 +5883,8 @@ Response example:
 ```json
 {
   "error": {
-    "kind": "invalid_client",
-    "message": "client request is not valid for the current state",
+    "kind": "invalid_configuration",
+    "message": "current_revision and confirm=true are required",
     "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
   }
 }
@@ -6092,8 +5895,8 @@ Response fields:
 | Field | Type | Required | Format / example / constraints | Purpose |
 |---|---|---|---|---|
 | `error` | `object` | yes | - | Machine-readable API error details. |
-| `error.kind` | `string` | yes | example: "invalid_client" | Stable machine-readable error kind. |
-| `error.message` | `string` | yes | example: "client request is not valid for the current state" | Safe human-readable error message. |
+| `error.kind` | `string` | yes | example: "invalid_configuration" | Stable machine-readable error kind. |
+| `error.message` | `string` | yes | example: "current_revision and confirm=true are required" | Safe human-readable error message. |
 | `error.request_id` | `string` | yes | format: uuid; example: "33ba813e-fc63-4af8-b338-7f7486f82202" | UUID used to correlate the request with server logs. |
 
 ##### `500 Internal Server Error`

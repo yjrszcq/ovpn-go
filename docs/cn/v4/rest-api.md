@@ -6,7 +6,7 @@ API 默认关闭，内部仅使用 HTTP，不管理 TLS 证书。远程访问时
 
 启用 API 后可直接访问内置开发文档：
 
-- `http://<listenIP>:<port>/docs/`：面向前端的完整接口文档。22 条接口各自独立展示自己的完整 HTTP 请求、参数、body 字段、成功返回、错误返回和 JSON 示例，不需要跳到共享模型区拼装。页面默认跟随浏览器语言（中文浏览器使用中文，其他语言使用英文），也可通过右上角手动切换并保留选择。
+- `http://<listenIP>:<port>/docs/`：面向前端的完整接口文档。24 条接口各自独立展示自己的完整 HTTP 请求、参数、body 字段、成功返回、错误返回和 JSON 示例，不需要跳到共享模型区拼装。页面默认跟随浏览器语言（中文浏览器使用中文，其他语言使用英文），也可通过右上角手动切换并保留选择。
 - `http://<listenIP>:<port>/docs/openapi.json`：OpenAPI 3.1 规范，可导入 Orval、OpenAPI Generator、NSwag 或 API 客户端。
 
 文档页面和 OpenAPI 文件不要求 API key；实际 `/api/v1/*` 资源仍然必须认证。
@@ -83,7 +83,7 @@ curl --fail --silent --show-error \
 
 ## 逐接口请求与返回
 
-以下 22 条接口均为独立完整契约。每条接口分别列出 Header、Path、Query 和 JSON Body 参数，字段表包含位置、类型、必填、格式、示例、约束及用途；每个返回状态也分别列出内容类型、示例和字段。除 `/healthz` 外，所有请求都必须发送 Bearer API key。
+以下 24 条接口均为独立完整契约。每条接口分别列出 Header、Path、Query 和 JSON Body 参数，字段表包含位置、类型、必填、格式、示例、约束及用途；每个返回状态也分别列出内容类型、示例和字段。除 `/healthz` 外，所有请求都必须发送 Bearer API key。
 
 ### 1. `GET /healthz`
 
@@ -5436,104 +5436,6 @@ JSON 格式有效，但违反客户端、IPv4 或配置语义规则。
 | `error.message` | `string` | 是 | 示例: "OpenVPN runtime is unavailable" | 可安全展示的错误消息。 |
 | `error.request_id` | `string` | 是 | 格式: uuid；示例: "33ba813e-fc63-4af8-b338-7f7486f82202" | 用于关联请求与服务器日志的 UUID。 |
 
-## 配置工作流
-
-配置使用乐观并发的三步流程：
-
-```text
-PUT desired -> GET plan -> POST apply
-```
-
-先读取 desired 配置。响应 body 包含 `digest` 和 `config`，同一 digest 还会作为带引号的 `ETag` 返回：
-
-```bash
-curl -H "Authorization: Bearer $OVPN_API_KEY" \
-  https://vpn-admin.example.com/api/v1/config/desired
-```
-
-替换 desired YAML 时，请求 body 必须是完整规范化的 `config` 对象，并在 `If-Match` 中发送之前读取的 digest：
-
-```http
-PUT /api/v1/config/desired HTTP/1.1
-Authorization: Bearer ...
-Content-Type: application/json
-If-Match: "<64-character-lowercase-digest>"
-
-{
-  "version": 1,
-  "server": {
-    "endpoint": "vpn.example.com",
-    "protocol": "udp",
-    "family": "auto",
-    "port": 1194,
-    "client_to_client": true
-  },
-  "ipv4": {
-    "network": "10.42.0.0/24",
-    "dynamic_pool_size": 64,
-    "nat_enabled": false,
-    "nat_interface": "auto",
-    "redirect_gateway": false,
-    "dns": [],
-    "routes": []
-  },
-  "logging": {"max_bytes": 10485760, "backups": 5}
-}
-```
-
-API 使用与 YAML 相同的领域规则验证输入，通过原子 rename 写入规范 mode-`0600` YAML，并返回新的 digest 和 `ETag`。digest 过期时返回 `409`，文件不会被替换。
-
-检查 `/api/v1/config/plan` 后，使用对应 desired digest 和 plan 中的 `configuration.current_revision` 执行 apply：
-
-```json
-{
-  "desired_digest": "<64-character-lowercase-digest>",
-  "current_revision": 12,
-  "force": false
-}
-```
-
-Apply 会执行常规健康预检，请求 supervisor 暂停 OpenVPN 与 broker，再次检查 digest/revision，在独占锁下运行现有 journal transaction，最后重启受管 runtime。API 进程在此期间保持可用。`force: true` 只能绕过经过确认的健康预检误报，不能绕过 schema、路径、锁、并发或 recovery 检查。
-
-digest 变化、applied revision 变化、mutation 锁占用或 plan 状态过期返回 `409`；supervisor 不可用返回 `503`。
-
-## 错误
-
-错误使用稳定 envelope，不包含内部路径、SQL、请求体、凭据或 Go cause：
-
-```json
-{
-  "error": {
-    "kind": "client_not_found",
-    "message": "client was not found",
-    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
-  }
-}
-```
-
-| Status | 含义 |
-|---|---|
-| `400` | 路径、query、JSON、media type、body 或并发 header 无效。 |
-| `401` | API key 缺失、格式错误、未知或已删除。 |
-| `404` | 资源或客户端不存在。 |
-| `405` | Method 不允许；可检查 `Allow` header。 |
-| `409` | digest、revision、状态、约束、锁或 recovery 冲突。 |
-| `422` | JSON 有效，但客户端、IPv4 或配置语义无效。 |
-| `503` | 认证存储、OpenVPN、broker、supervisor 或必要依赖不可用。 |
-| `500` | 未分类内部错误。 |
-
-可使用 `request_id` 关联失败请求，但不要记录 Authorization header 或 body。
-
-## 安全边界
-
-- 不需要远程管理时保持 `api.enabled: false`。
-- 绑定 loopback 或私有管理网络，在可信反向代理终止 TLS。
-- 除 API 认证外，还应独立限制反向代理和宿主机防火墙访问。
-- 每个集成使用独立 API key，并及时删除不用的 key。
-- API key 和 profile 不能进入日志、浏览器存储、telemetry、源码仓库或聊天系统。
-- SQLite、YAML、PKI、artifact 和 key 必须作为一个协调的运维单元备份；REST API 不是备份接口。
-- API v1 不提供用户、session、RBAC、key scope、key 过期、异步任务或内置 TLS。
-
 ### 23. `GET /api/v1/config/export`
 
 下载已应用配置的 YAML。可迁移的已应用配置 YAML，不包含文件中未应用的修改和注释。
@@ -5756,104 +5658,6 @@ Bearer API key 缺失、格式错误、未知或已删除。
 | `error.message` | `string` | 是 | 示例: "OpenVPN runtime is unavailable" | 可安全展示的错误消息。 |
 | `error.request_id` | `string` | 是 | 格式: uuid；示例: "33ba813e-fc63-4af8-b338-7f7486f82202" | 用于关联请求与服务器日志的 UUID。 |
 
-## 配置工作流
-
-配置使用乐观并发的三步流程：
-
-```text
-PUT desired -> GET plan -> POST apply
-```
-
-先读取 desired 配置。响应 body 包含 `digest` 和 `config`，同一 digest 还会作为带引号的 `ETag` 返回：
-
-```bash
-curl -H "Authorization: Bearer $OVPN_API_KEY" \
-  https://vpn-admin.example.com/api/v1/config/desired
-```
-
-替换 desired YAML 时，请求 body 必须是完整规范化的 `config` 对象，并在 `If-Match` 中发送之前读取的 digest：
-
-```http
-PUT /api/v1/config/desired HTTP/1.1
-Authorization: Bearer ...
-Content-Type: application/json
-If-Match: "<64-character-lowercase-digest>"
-
-{
-  "version": 1,
-  "server": {
-    "endpoint": "vpn.example.com",
-    "protocol": "udp",
-    "family": "auto",
-    "port": 1194,
-    "client_to_client": true
-  },
-  "ipv4": {
-    "network": "10.42.0.0/24",
-    "dynamic_pool_size": 64,
-    "nat_enabled": false,
-    "nat_interface": "auto",
-    "redirect_gateway": false,
-    "dns": [],
-    "routes": []
-  },
-  "logging": {"max_bytes": 10485760, "backups": 5}
-}
-```
-
-API 使用与 YAML 相同的领域规则验证输入，通过原子 rename 写入规范 mode-`0600` YAML，并返回新的 digest 和 `ETag`。digest 过期时返回 `409`，文件不会被替换。
-
-检查 `/api/v1/config/plan` 后，使用对应 desired digest 和 plan 中的 `configuration.current_revision` 执行 apply：
-
-```json
-{
-  "desired_digest": "<64-character-lowercase-digest>",
-  "current_revision": 12,
-  "force": false
-}
-```
-
-Apply 会执行常规健康预检，请求 supervisor 暂停 OpenVPN 与 broker，再次检查 digest/revision，在独占锁下运行现有 journal transaction，最后重启受管 runtime。API 进程在此期间保持可用。`force: true` 只能绕过经过确认的健康预检误报，不能绕过 schema、路径、锁、并发或 recovery 检查。
-
-digest 变化、applied revision 变化、mutation 锁占用或 plan 状态过期返回 `409`；supervisor 不可用返回 `503`。
-
-## 错误
-
-错误使用稳定 envelope，不包含内部路径、SQL、请求体、凭据或 Go cause：
-
-```json
-{
-  "error": {
-    "kind": "client_not_found",
-    "message": "client was not found",
-    "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
-  }
-}
-```
-
-| Status | 含义 |
-|---|---|
-| `400` | 路径、query、JSON、media type、body 或并发 header 无效。 |
-| `401` | API key 缺失、格式错误、未知或已删除。 |
-| `404` | 资源或客户端不存在。 |
-| `405` | Method 不允许；可检查 `Allow` header。 |
-| `409` | digest、revision、状态、约束、锁或 recovery 冲突。 |
-| `422` | JSON 有效，但客户端、IPv4 或配置语义无效。 |
-| `503` | 认证存储、OpenVPN、broker、supervisor 或必要依赖不可用。 |
-| `500` | 未分类内部错误。 |
-
-可使用 `request_id` 关联失败请求，但不要记录 Authorization header 或 body。
-
-## 安全边界
-
-- 不需要远程管理时保持 `api.enabled: false`。
-- 绑定 loopback 或私有管理网络，在可信反向代理终止 TLS。
-- 除 API 认证外，还应独立限制反向代理和宿主机防火墙访问。
-- 每个集成使用独立 API key，并及时删除不用的 key。
-- API key 和 profile 不能进入日志、浏览器存储、telemetry、源码仓库或聊天系统。
-- SQLite、YAML、PKI、artifact 和 key 必须作为一个协调的运维单元备份；REST API 不是备份接口。
-- API v1 不提供用户、session、RBAC、key scope、key 过期、异步任务或内置 TLS。
-
 ### 24. `POST /api/v1/config/restore`
 
 将已应用配置恢复到当前 YAML 文件。实例必须已初始化。明确确认丢弃文件中未应用的修改，并发送 GET applied 返回的 current_revision。可恢复缺失或损坏的 YAML，不应用配置、不修改 SQLite、不重启服务；版本过期、不安全的目标路径和未完成的操作会被拒绝。
@@ -5872,7 +5676,6 @@ digest 变化、applied revision 变化、mutation 锁占用或 plan 状态过�
 | 字段 | 位置 | 类型 | 必填 | 格式 / 示例 / 约束 | 用途说明 |
 |---|---|---|---|---|---|
 | `current_revision` | `body` | `integer` | 是 | 最小值: 1；示例: 12 | GET applied 返回的当前已应用版本号。 |
-
 | `confirm` | `body` | `boolean` | 是 | 固定值：true | 必须为 true，确认丢弃 YAML 中未应用的修改和注释。 |
 
 #### 请求示例
@@ -6071,7 +5874,7 @@ Bearer API key 缺失、格式错误、未知或已删除。
 
 ##### `422 无法处理`
 
-JSON 格式有效，但违反客户端、IPv4 或配置语义规则。
+缺少版本号、覆盖确认或目标路径不安全。符号链接和目录返回 unsafe_config_target。
 
 内容类型：`application/json`
 
@@ -6080,8 +5883,8 @@ JSON 格式有效，但违反客户端、IPv4 或配置语义规则。
 ```json
 {
   "error": {
-    "kind": "invalid_client",
-    "message": "client request is not valid for the current state",
+    "kind": "invalid_configuration",
+    "message": "current_revision and confirm=true are required",
     "request_id": "33ba813e-fc63-4af8-b338-7f7486f82202"
   }
 }
@@ -6092,8 +5895,8 @@ JSON 格式有效，但违反客户端、IPv4 或配置语义规则。
 | 字段 | 类型 | 必填 | 格式 / 示例 / 约束 | 用途说明 |
 |---|---|---|---|---|
 | `error` | `object` | 是 | - | 可供程序读取的 API 错误详情。 |
-| `error.kind` | `string` | 是 | 示例: "invalid_client" | 稳定且可供程序读取的错误类型。 |
-| `error.message` | `string` | 是 | 示例: "client request is not valid for the current state" | 可安全展示的错误消息。 |
+| `error.kind` | `string` | 是 | 示例: "invalid_configuration" | 稳定且可供程序读取的错误类型。 |
+| `error.message` | `string` | 是 | 示例: "current_revision and confirm=true are required" | 可安全展示的错误消息。 |
 | `error.request_id` | `string` | 是 | 格式: uuid；示例: "33ba813e-fc63-4af8-b338-7f7486f82202" | 用于关联请求与服务器日志的 UUID。 |
 
 ##### `500 服务器内部错误`
