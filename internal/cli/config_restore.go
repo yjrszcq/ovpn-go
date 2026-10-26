@@ -2,11 +2,8 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 
 	"github.com/yjrszcq/ovpn-go/internal/apperror"
 	configservice "github.com/yjrszcq/ovpn-go/internal/config"
@@ -50,7 +47,7 @@ func restoreConfiguration(yes bool, stdout, stderr io.Writer) int {
 			return writeError(stderr, apperror.Wrap(apperror.ExitPolicy, "confirmation_required", "config export --restore requires confirmation or --yes", err))
 		}
 	}
-	if err := restoreConfigFile(path, content); err != nil {
+	if err := configservice.RestoreFile(path, content); err != nil {
 		return writeError(stderr, apperror.Wrap(apperror.ExitFailure, "output_failure", "restore configuration file", err))
 	}
 	if empty {
@@ -59,38 +56,4 @@ func restoreConfiguration(yes bool, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "Restored %s from %s.\n", path, source)
 	}
 	return int(apperror.ExitSuccess)
-}
-
-func restoreConfigFile(path string, content []byte) error {
-	if info, err := os.Lstat(path); err == nil {
-		if !info.Mode().IsRegular() {
-			return fmt.Errorf("configuration target must be a regular file: %s", path)
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	file, err := os.CreateTemp(filepath.Dir(path), ".config-restore-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(file.Name())
-	if _, err := file.Write(content); err != nil {
-		_ = file.Close()
-		return err
-	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		return err
-	}
-	if err := file.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(file.Name(), path); err != nil {
-		return err
-	}
-	directory, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	return errors.Join(directory.Sync(), directory.Close())
 }
