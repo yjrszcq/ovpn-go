@@ -206,3 +206,26 @@ func TestConfigurationExportAndRestoreRoutes(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigurationRestoreSanitizesErrors(t *testing.T) {
+	for _, test := range []struct {
+		err    error
+		status int
+		code   string
+	}{
+		{configurationservice.ErrPlanConflict, 409, "configuration_conflict"},
+		{configurationservice.ErrRecoveryRequired, 409, "recovery_required"},
+		{configservice.ErrUnsafeTarget, 422, "unsafe_config_target"},
+		{errors.New("private /secret/path failure"), 500, "internal_error"},
+	} {
+		resources := testConfigurationResources()
+		resources.ConfigRestore = func(context.Context, ConfigRestoreRequest) (configservice.AppliedView, error) {
+			return configservice.AppliedView{}, test.err
+		}
+		response := httptest.NewRecorder()
+		newConfigurationHandler(t, resources).ServeHTTP(response, authenticatedConfigurationRequest("POST", "/api/v1/config/restore", `{"current_revision":4,"confirm":true}`))
+		if response.Code != test.status || !strings.Contains(response.Body.String(), test.code) || strings.Contains(response.Body.String(), "/secret/") || response.Header().Get("ETag") != "" {
+			t.Fatalf("invalid error: %d %s", response.Code, response.Body.String())
+		}
+	}
+}

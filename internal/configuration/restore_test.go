@@ -9,6 +9,7 @@ import (
 
 	"github.com/yjrszcq/ovpn-go/internal/artifact"
 	configservice "github.com/yjrszcq/ovpn-go/internal/config"
+	"github.com/yjrszcq/ovpn-go/internal/domain"
 )
 
 func TestRestoreChecksRevisionAndPreservesAppliedState(t *testing.T) {
@@ -58,5 +59,29 @@ func TestRestoreHonorsApplyDataLock(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("busy restore wrote YAML")
+	}
+}
+
+func TestRestoreRefusesInterruptedArtifacts(t *testing.T) {
+	_, store, root, _, instance := applyFixture(t)
+	local, err := artifact.NewLocal(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := domain.GenerateUUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err := local.BeginOperation(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer operation.Rollback()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if _, err := Restore(context.Background(), store, root, path, instance.Applied.Revision); !errors.Is(err, ErrRecoveryRequired) {
+		t.Fatalf("recovery err=%v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("interrupted restore wrote YAML")
 	}
 }
